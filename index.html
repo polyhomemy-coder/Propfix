@@ -1,0 +1,2189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PropFix — Property Maintenance</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --brand:#0891b2;--brand-dark:#0e7490;--brand-mid:#06b6d4;--brand-light:#cffafe;--brand-bg:#ecfeff;
+  --accent:#f59e0b;--accent-dark:#b45309;--accent-light:#fef3c7;
+  --red:#dc2626;--red-light:#fee2e2;
+  --blue:#2563eb;--blue-light:#dbeafe;
+  --green:#16a34a;--green-light:#dcfce7;
+  --gray-50:#f9fafb;--gray-100:#f3f4f6;--gray-200:#e5e7eb;--gray-300:#d1d5db;
+  --gray-400:#9ca3af;--gray-500:#6b7280;--gray-600:#4b5563;--gray-700:#374151;
+  --gray-800:#1f2937;--gray-900:#111827;--white:#ffffff;
+  --radius:10px;--radius-lg:16px;
+  --shadow:0 1px 3px rgba(0,0,0,0.08),0 1px 2px rgba(0,0,0,0.05);
+  --shadow-md:0 4px 12px rgba(0,0,0,0.10);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:var(--gray-100);color:var(--gray-800);font-size:14px;min-height:100vh}
+button{cursor:pointer;font-family:inherit}
+input,select,textarea{font-family:inherit}
+
+/* AUTH */
+#auth-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:#0c4a6e}
+.auth-card{background:var(--white);border-radius:var(--radius-lg);padding:40px;width:100%;max-width:400px;box-shadow:var(--shadow-md)}
+.auth-logo{text-align:center;margin-bottom:32px}
+.auth-logo h1{font-size:28px;font-weight:600;color:var(--gray-900);letter-spacing:-0.5px}
+.auth-logo h1 span{color:var(--brand)}
+.auth-logo p{color:var(--gray-500);font-size:13px;margin-top:4px}
+.form-group{margin-bottom:16px}
+.form-group label{display:block;font-size:12px;font-weight:500;color:var(--gray-600);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.04em}
+.form-group input{width:100%;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:var(--radius);font-size:14px;color:var(--gray-800);background:var(--white);transition:border-color 0.2s}
+.form-group input:focus{outline:none;border-color:var(--brand)}
+.btn-auth{width:100%;padding:12px;background:var(--brand);color:white;border:none;border-radius:var(--radius);font-size:14px;font-weight:500;margin-top:8px}
+.btn-auth:hover{background:var(--brand-dark)}
+.auth-error{background:var(--red-light);color:var(--red);padding:10px 12px;border-radius:var(--radius);font-size:13px;margin-bottom:16px;display:none}
+.demo-hint{text-align:center;font-size:11px;color:var(--gray-400);margin-top:14px;line-height:1.9}
+
+/* APP SHELL */
+#app{display:none;flex-direction:column;min-height:100vh}
+.topbar{background:#0c4a6e;color:white;padding:0 20px;height:54px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.topbar-left{display:flex;align-items:center;gap:12px}
+.topbar-logo{font-size:18px;font-weight:600;letter-spacing:-0.3px}
+.topbar-logo span{color:var(--brand-mid)}
+.role-badge{font-size:11px;padding:3px 9px;border-radius:20px;font-weight:500}
+.role-badge.manager{background:rgba(8,145,178,0.35);color:#a5f3fc}
+.role-badge.admin{background:rgba(245,158,11,0.3);color:#fde68a}
+.role-badge.runner{background:rgba(255,255,255,0.15);color:rgba(255,255,255,0.85)}
+.topbar-right{display:flex;align-items:center;gap:10px}
+.topbar-user{font-size:13px;color:rgba(255,255,255,0.7)}
+.btn-logout{font-size:12px;padding:5px 12px;border-radius:var(--radius);border:1px solid rgba(255,255,255,0.2);background:transparent;color:rgba(255,255,255,0.7)}
+.btn-logout:hover{background:rgba(255,255,255,0.1);color:white}
+.nav-tabs{background:var(--white);border-bottom:1px solid var(--gray-200);padding:0 20px;display:flex;overflow-x:auto}
+.nav-tab{padding:12px 16px;font-size:13px;font-weight:500;color:var(--gray-500);border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap}
+.nav-tab:hover{color:var(--gray-800)}
+.nav-tab.active{color:var(--brand);border-bottom-color:var(--brand)}
+.page{display:none;padding:20px;max-width:1400px;margin:0 auto;width:100%}
+.page.active{display:block;animation:pageIn 0.28s cubic-bezier(0.22,1,0.36,1) both}
+@keyframes pageIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+
+/* Card stagger animation */
+.task-card{animation:cardIn 0.25s cubic-bezier(0.22,1,0.36,1) both}
+@keyframes cardIn{from{opacity:0;transform:translateY(10px) scale(0.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+
+/* Button press ripple */
+.btn,.btn-primary,.btn-sm,.btn-auth,.subview-btn,.status-tab,.nav-tab{position:relative;overflow:hidden}
+.ripple{position:absolute;border-radius:50%;background:rgba(255,255,255,0.35);transform:scale(0);animation:rippleAnim 0.5s linear;pointer-events:none}
+@keyframes rippleAnim{to{transform:scale(4);opacity:0}}
+
+/* Modal pop animation */
+.modal{animation:modalIn 0.22s cubic-bezier(0.34,1.56,0.64,1) both}
+@keyframes modalIn{from{opacity:0;transform:scale(0.92) translateY(12px)}to{opacity:1;transform:scale(1) translateY(0)}}
+
+/* Tab active slide indicator */
+.nav-tab{transition:color 0.18s,border-color 0.18s}
+.nav-tab.active{color:var(--brand);border-bottom-color:var(--brand)}
+
+/* Status tab pulse on change */
+.status-tab.active{transition:background 0.2s,color 0.2s}
+
+/* Topbar logo shimmer */
+.topbar-logo span{background:linear-gradient(90deg,var(--brand-mid),#22d3ee,var(--brand-mid));background-size:200%;-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:shimmer 3s linear infinite}
+@keyframes shimmer{0%{background-position:200%}100%{background-position:-200%}}
+
+/* Done badge pop */
+.status-badge{transition:all 0.2s}
+
+/* Hover lift on cards */
+.task-card{transition:box-shadow 0.18s,transform 0.18s,opacity 0.18s}
+.task-card:hover{box-shadow:var(--shadow-md);transform:translateY(-2px) scale(1.005)}
+.task-card:active{transform:translateY(0) scale(0.99);box-shadow:var(--shadow)}
+
+/* Perf card pulse in */
+.perf-card,.pie-card{animation:cardIn 0.3s cubic-bezier(0.22,1,0.36,1) both}
+
+/* Cal day hover */
+.cal-day{transition:background 0.15s,transform 0.12s}
+.cal-day.has-tasks:hover{transform:scale(1.02);z-index:2;position:relative}
+
+/* Toast slide */
+#toast{transition:opacity 0.22s,transform 0.22s}
+
+/* Subview btn */
+.subview-btn{transition:all 0.18s}
+
+/* Cal popup slide in */
+.cal-popup{animation:modalIn 0.22s cubic-bezier(0.34,1.56,0.64,1) both}
+
+/* STATUS TABS */
+.status-tabs{display:flex;background:var(--white);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;margin-bottom:16px;border:1.5px solid var(--gray-200)}
+.status-tab{flex:1;padding:10px 16px;text-align:center;font-size:13px;font-weight:500;color:var(--gray-500);cursor:pointer;border-right:1px solid var(--gray-200);transition:all 0.15s;display:flex;align-items:center;justify-content:center;gap:6px}
+.status-tab:last-child{border-right:none}
+.status-tab:hover{background:var(--gray-50);color:var(--gray-800)}
+.status-tab.active{background:#0c4a6e;color:white}
+.status-count{font-size:11px;font-weight:600;padding:1px 6px;border-radius:20px;background:rgba(255,255,255,0.2)}
+.status-tab:not(.active) .status-count{background:var(--gray-200);color:var(--gray-600)}
+
+/* SUBVIEW */
+.subview-bar{display:flex;gap:8px;margin-bottom:16px}
+.subview-btn{padding:9px 20px;border-radius:var(--radius);border:1.5px solid var(--gray-200);background:var(--white);color:var(--gray-600);font-size:13px;font-weight:500;box-shadow:var(--shadow);transition:all 0.15s}
+.subview-btn:hover{border-color:var(--accent);color:var(--accent-dark);background:var(--accent-light)}
+.subview-btn.active{background:var(--accent);color:white;border-color:var(--accent-dark);box-shadow:0 2px 8px rgba(245,158,11,0.35)}
+
+/* TOOLBAR */
+.toolbar{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.btn{padding:8px 14px;border-radius:var(--radius);border:1.5px solid var(--gray-200);background:var(--white);color:var(--gray-700);font-size:13px;font-weight:500;transition:all 0.15s;box-shadow:var(--shadow)}
+.btn:hover{border-color:var(--gray-300);background:var(--gray-50)}
+.btn-primary{background:var(--brand);color:white;border-color:var(--brand)}
+.btn-primary:hover{background:var(--brand-dark);border-color:var(--brand-dark)}
+.btn-sm{padding:5px 10px;font-size:12px}
+.btn-danger{color:var(--red);border-color:#fca5a5}
+.btn-danger:hover{background:var(--red-light)}
+.btn-wa{background:#25d366;color:white;border-color:#25d366;display:flex;align-items:center;gap:6px}
+.btn-wa:hover{background:#1db954}
+.wa-icon{width:14px;height:14px;fill:white}
+.search-input{padding:8px 12px;border-radius:var(--radius);border:1.5px solid var(--gray-200);background:var(--white);font-size:13px;color:var(--gray-800);width:200px;box-shadow:var(--shadow)}
+.search-input:focus{outline:none;border-color:var(--brand)}
+.filter-sel{padding:7px 10px;border-radius:var(--radius);border:1.5px solid var(--gray-200);background:var(--white);font-size:13px;color:var(--gray-700);box-shadow:var(--shadow)}
+.filter-sel:focus{outline:none;border-color:var(--brand)}
+
+/* TASK GRID */
+.task-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+@media(max-width:700px){.task-grid{grid-template-columns:1fr}}
+.empty-state{text-align:center;padding:48px 20px;color:var(--gray-400);background:var(--white);border-radius:var(--radius-lg);box-shadow:var(--shadow)}
+.empty-state p{font-size:15px;font-weight:500;color:var(--gray-500);margin-bottom:4px}
+
+/* TASK CARD */
+.task-card{background:var(--white);border-radius:var(--radius);padding:10px 12px;box-shadow:var(--shadow);cursor:pointer;transition:box-shadow 0.15s,transform 0.1s;border-left:3px solid transparent}
+.task-card:hover{box-shadow:var(--shadow-md);transform:translateY(-1px)}
+.task-card.pri-urgent{border-left-color:#dc2626}
+.task-card.pri-normal{border-left-color:var(--accent)}
+.task-card.pri-low{border-left-color:var(--brand)}
+.tc-top{display:flex;align-items:flex-start;gap:8px;margin-bottom:4px}
+.cat-logo{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.tc-title{font-size:12px;font-weight:400;color:var(--gray-700);line-height:1.35;margin-bottom:2px}
+.tc-desc{font-size:11px;color:var(--gray-500);line-height:1.4;margin-top:2px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.tc-loc{display:flex;align-items:flex-start;gap:4px;margin-bottom:3px}
+.tc-loc-text{font-size:13px;font-weight:700;color:var(--gray-900);line-height:1.3}
+.tc-names{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:4px}
+.tc-name-chip{font-size:10px;font-weight:600;padding:2px 7px;border-radius:20px;display:inline-flex;align-items:center;gap:3px}
+.tc-name-runner{background:var(--brand-light);color:var(--brand-dark)}
+.tc-name-admin{background:var(--accent-light);color:var(--accent-dark)}
+.tc-name-manager{background:var(--gray-100);color:var(--gray-600)}
+.tc-remark{font-size:10px;color:var(--gray-400);font-style:italic;line-height:1.3;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+.tc-delay{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;padding:1px 6px;border-radius:20px;letter-spacing:0.02em}
+.tc-delay-amber{background:#fef3c7;color:#92400e}
+.tc-delay-red{background:#fee2e2;color:#991b1b}
+.tc-bottom{display:flex;align-items:center;justify-content:space-between;margin-top:6px;padding-top:6px;border-top:1px solid var(--gray-100);flex-wrap:wrap;gap:3px}
+.tc-meta{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.tag{font-size:9px;font-weight:600;padding:1px 6px;border-radius:20px}
+.tag-urgent{background:#fee2e2;color:#dc2626}
+.tag-normal{background:var(--accent-light);color:var(--accent-dark)}
+.tag-low{background:var(--brand-light);color:var(--brand-dark)}
+.avatar-sm{width:18px;height:18px;border-radius:50%;font-size:7px;font-weight:600;display:flex;align-items:center;justify-content:center;background:var(--gray-200);color:var(--gray-600)}
+.tc-assignee{display:flex;align-items:center;gap:3px;font-size:10px;color:var(--gray-500)}
+.task-sched{font-size:10px;color:var(--brand);margin-top:3px;font-weight:500}
+.tc-status-row{display:flex;gap:4px;margin-top:5px;align-items:center}
+.status-sel-inline{font-size:10px;padding:3px 6px;border-radius:6px;border:1px solid var(--gray-200);background:var(--white);color:var(--gray-700);cursor:pointer}
+.tc-mirror-badge{font-size:9px;background:var(--brand-light);color:var(--brand-dark);padding:1px 5px;border-radius:20px;display:inline-block}
+
+/* LIST VIEW */
+.list-wrap{background:var(--white);border-radius:var(--radius-lg);box-shadow:var(--shadow);overflow:hidden}
+.list-table{width:100%;border-collapse:collapse}
+.list-table th{padding:10px 14px;text-align:left;font-size:11px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.05em;border-bottom:1px solid var(--gray-200);background:var(--gray-50)}
+.list-table td{padding:11px 14px;border-bottom:1px solid var(--gray-100);vertical-align:middle;font-size:13px}
+.list-table tr:last-child td{border-bottom:none}
+.list-table tr:hover td{background:var(--gray-50);cursor:pointer}
+.status-badge{font-size:11px;font-weight:500;padding:3px 9px;border-radius:20px;white-space:nowrap}
+.status-todo{background:var(--gray-100);color:var(--gray-600)}
+.status-inprog{background:var(--brand-light);color:var(--brand-dark)}
+.status-done{background:var(--accent-light);color:var(--accent-dark)}
+
+/* DONE PANEL */
+.done-panel{background:var(--white);border-radius:var(--radius-lg);box-shadow:var(--shadow);overflow:hidden;margin-bottom:20px}
+.done-item{display:flex;align-items:center;gap:12px;padding:11px 18px;border-bottom:1px solid var(--gray-100)}
+.done-item:last-child{border-bottom:none}
+.done-check{width:18px;height:18px;border-radius:50%;background:var(--brand-light);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--brand-dark);flex-shrink:0}
+.done-info{flex:1}
+.done-desc{font-size:13px;font-weight:600;color:var(--gray-800)}
+.done-sub{font-size:11px;color:var(--gray-500);margin-top:1px}
+.done-who{font-size:11px;font-weight:500;padding:2px 8px;border-radius:20px;background:var(--gray-100);color:var(--gray-600);white-space:nowrap}
+.done-empty{padding:20px;text-align:center;font-size:13px;color:var(--gray-400)}
+/* Person accordion in daily report */
+.person-section{margin-bottom:16px}
+.person-header{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--gray-50);border-radius:var(--radius);cursor:pointer;border:1px solid var(--gray-200)}
+.person-header:hover{background:var(--brand-light)}
+.person-name{font-size:13px;font-weight:600;color:var(--gray-800)}
+.person-count{font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;background:var(--brand);color:white}
+
+/* ADMIN TODO */
+.todo-section{max-width:700px}
+.todo-add-row{display:flex;gap:8px;margin-bottom:16px}
+.todo-add-input{flex:1;padding:9px 12px;border:1.5px solid var(--gray-200);border-radius:var(--radius);font-size:13px;color:var(--gray-800)}
+.todo-add-input:focus{outline:none;border-color:var(--brand)}
+.todo-list{display:flex;flex-direction:column;gap:8px}
+.todo-item{background:var(--white);border-radius:var(--radius);padding:12px 14px;box-shadow:var(--shadow);display:flex;align-items:center;gap:12px;border-left:3px solid var(--gray-200)}
+.todo-item.ti-inprog{border-left-color:var(--brand)}
+.todo-item.ti-done{border-left-color:var(--accent)}
+.todo-text{flex:1;font-size:13px;color:var(--gray-800)}
+.todo-text.done{text-decoration:line-through;color:var(--gray-400)}
+.todo-status-sel{font-size:12px;padding:4px 8px;border-radius:var(--radius);border:1.5px solid var(--gray-200);background:var(--white);color:var(--gray-700);min-width:110px}
+.todo-del{font-size:13px;color:var(--gray-400);background:none;border:none;cursor:pointer;padding:3px 6px;border-radius:4px}
+.todo-del:hover{color:var(--red);background:var(--red-light)}
+
+/* PERF */
+.perf-controls{display:flex;align-items:center;gap:10px;margin-bottom:20px;flex-wrap:wrap}
+.perf-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:24px}
+.perf-card{background:var(--white);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);text-align:center}
+.perf-num{font-size:32px;font-weight:600;color:var(--gray-900);font-family:'DM Mono',monospace}
+.perf-label{font-size:12px;color:var(--gray-500);margin-top:4px;text-transform:uppercase;letter-spacing:0.04em}
+.perf-bar-wrap{background:var(--white);border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:20px;margin-bottom:20px}
+.perf-bar-title{font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:16px}
+.perf-row{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.perf-row-label{font-size:12px;color:var(--gray-600);width:120px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.perf-bar-bg{flex:1;height:10px;background:var(--gray-100);border-radius:5px;overflow:hidden}
+.perf-bar-fill{height:100%;background:var(--brand);border-radius:5px;transition:width 0.4s}
+.perf-row-num{font-size:12px;font-weight:600;color:var(--gray-700);font-family:'DM Mono',monospace;width:24px;text-align:right}
+.pie-section{background:var(--white);border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:20px;margin-bottom:20px}
+.pie-section-title{font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:16px}
+.pie-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:20px}
+.pie-card{display:flex;flex-direction:column;align-items:center;gap:10px}
+.pie-canvas-wrap{position:relative;width:140px;height:140px}
+.pie-pct{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
+.pie-pct-num{font-size:22px;font-weight:700;color:var(--gray-900);font-family:'DM Mono',monospace;line-height:1}
+.pie-pct-label{font-size:10px;color:var(--gray-400);margin-top:2px;text-transform:uppercase;letter-spacing:0.04em}
+.pie-legend{display:flex;flex-direction:column;gap:5px;align-self:center}
+.pie-legend-row{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--gray-600)}
+.pie-legend-dot{width:10px;height:10px;border-radius:3px;flex-shrink:0}
+
+/* CALENDAR */
+.cal-wrap{background:var(--white);border-radius:var(--radius-lg);box-shadow:var(--shadow);overflow:hidden}
+.cal-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--gray-200)}
+.cal-month{font-size:15px;font-weight:600;color:var(--gray-900)}
+.cal-nav{display:flex;gap:6px}
+.cal-nav-btn{width:30px;height:30px;border-radius:var(--radius);border:1.5px solid var(--gray-200);background:var(--white);color:var(--gray-600);font-size:14px;display:flex;align-items:center;justify-content:center}
+.cal-nav-btn:hover{background:var(--brand-light)}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr)}
+.cal-day-header{padding:10px 0;text-align:center;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.05em}
+.cal-day{min-height:80px;padding:6px;border-right:1px solid var(--gray-100);border-bottom:1px solid var(--gray-100);transition:background 0.1s}
+.cal-day:hover{background:var(--brand-bg)}
+.cal-day.other-month{background:var(--gray-50)}
+.cal-day.today .cal-date{background:var(--brand);color:white;border-radius:50%}
+.cal-day.has-tasks{background:#f0fdfe}
+.cal-date{width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:500;color:var(--gray-700);margin-bottom:4px}
+.cal-task-pill{font-size:10px;font-weight:500;padding:1px 6px;border-radius:4px;margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+.cal-task-urgent{background:#fee2e2;color:#dc2626}
+.cal-task-normal{background:var(--accent-light);color:var(--accent-dark)}
+.cal-task-low{background:var(--brand-light);color:var(--brand-dark)}
+.cal-more{font-size:10px;color:var(--gray-400);padding:1px 4px}
+.cal-name-pill{font-size:9px;font-weight:600;padding:2px 6px;border-radius:10px;margin-bottom:2px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:3px;transition:opacity 0.1s}
+.cal-name-pill:hover{opacity:0.8}
+.cal-popup-bg{display:none;position:fixed;inset:0;z-index:300;background:rgba(0,0,0,0.4);align-items:center;justify-content:center;padding:16px}
+.cal-popup-bg.open{display:flex}
+.cal-popup{background:white;border-radius:16px;width:100%;max-width:420px;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.2)}
+.cal-popup-hdr{padding:16px 20px 12px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:white}
+.cal-popup-title{font-size:15px;font-weight:700;color:#0f172a}
+.cal-popup-close{width:26px;height:26px;border-radius:50%;border:none;background:#f1f5f9;color:#64748b;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.cal-popup-item{padding:12px 20px;border-bottom:1px solid #f1f5f9;cursor:pointer}
+.cal-popup-item:last-child{border-bottom:none}
+.cal-popup-item:hover{background:#f8fafc}
+.cal-popup-task-title{font-size:13px;font-weight:600;color:#1e293b;margin-bottom:3px}
+.cal-popup-task-loc{font-size:11px;color:#64748b;margin-bottom:3px}
+.cal-popup-task-who{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.cal-popup-who-chip{font-size:10px;font-weight:600;padding:2px 7px;border-radius:10px;background:#ecfeff;color:#0e7490}
+.cal-legend{display:flex;gap:16px;padding:12px 20px;border-top:1px solid var(--gray-100);flex-wrap:wrap}
+.cal-legend-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--gray-500)}
+.cal-legend-dot{width:10px;height:10px;border-radius:3px}
+
+/* MODAL */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:200;align-items:center;justify-content:center;padding:16px}
+.modal-bg.open{display:flex}
+.modal{background:var(--white);border-radius:var(--radius-lg);width:100%;max-width:520px;max-height:92vh;overflow-y:auto;box-shadow:var(--shadow-md)}
+.modal-header{padding:20px 24px 16px;border-bottom:1px solid var(--gray-200);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--white);z-index:1}
+.modal-title{font-size:16px;font-weight:600;color:var(--gray-900)}
+.modal-close{width:28px;height:28px;border-radius:50%;border:none;background:var(--gray-100);color:var(--gray-500);font-size:16px;display:flex;align-items:center;justify-content:center}
+.modal-close:hover{background:var(--gray-200)}
+.modal-body{padding:20px 24px}
+.modal-footer{padding:16px 24px;border-top:1px solid var(--gray-200);display:flex;justify-content:flex-end;gap:10px;position:sticky;bottom:0;background:var(--white)}
+.mfg{margin-bottom:14px}
+.mfl{font-size:12px;font-weight:500;color:var(--gray-600);margin-bottom:5px;display:block;text-transform:uppercase;letter-spacing:0.04em}
+.mfl-bold{font-size:13px;font-weight:700;color:var(--gray-800);margin-bottom:6px;display:block}
+.mfi{width:100%;padding:9px 12px;border:1.5px solid var(--gray-200);border-radius:var(--radius);font-size:13px;color:var(--gray-800);background:var(--white);transition:border-color 0.2s}
+.mfi:focus{outline:none;border-color:var(--brand)}
+.mfrow{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+textarea.mfi{resize:vertical;min-height:72px;font-size:14px}
+.loc-box{background:var(--gray-50);border-radius:var(--radius);padding:14px;margin-bottom:14px}
+.loc-box-title{font-size:11px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px}
+.detail-label{font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:5px}
+.sched-banner{background:var(--brand-light);border-radius:var(--radius);padding:10px 14px;margin-top:10px;display:flex;align-items:center;gap:10px;font-size:13px;color:var(--brand-dark)}
+
+/* USERS / PROPS */
+.users-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.user-card{background:var(--white);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);display:flex;align-items:center;gap:14px}
+.user-avatar{width:44px;height:44px;border-radius:50%;font-size:16px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.user-info{flex:1}
+.user-name{font-size:14px;font-weight:600;color:var(--gray-900)}
+.user-email{font-size:12px;color:var(--gray-500);margin-top:2px}
+.user-role{font-size:11px;font-weight:500;padding:2px 8px;border-radius:20px;margin-top:5px;display:inline-block}
+.user-role.manager{background:var(--brand-light);color:var(--brand-dark)}
+.user-role.admin{background:var(--accent-light);color:var(--accent-dark)}
+.user-role.runner{background:var(--gray-100);color:var(--gray-600)}
+.props-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+.prop-card{background:var(--white);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow)}
+.prop-condo-name{font-size:15px;font-weight:700;color:var(--gray-900);margin-bottom:8px}
+.prop-units-label{font-size:11px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px}
+.prop-units{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px}
+.unit-chip{font-size:11px;font-weight:600;background:var(--gray-100);color:var(--gray-700);padding:3px 9px;border-radius:20px}
+.section-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.section-title{font-size:16px;font-weight:600;color:var(--gray-900)}
+.section-sub{font-size:13px;color:var(--gray-500);margin-top:2px}
+
+/* TOAST */
+#toast{position:fixed;bottom:20px;right:20px;background:#0c4a6e;color:white;padding:10px 16px;border-radius:var(--radius);font-size:13px;box-shadow:var(--shadow-md);z-index:999;opacity:0;transform:translateY(8px);transition:all 0.25s;pointer-events:none}
+#toast.show{opacity:1;transform:translateY(0)}
+
+@media(max-width:600px){.mfrow{grid-template-columns:1fr}.detail-grid{grid-template-columns:1fr}.toolbar{gap:6px}.search-input{width:100%}.topbar-user{display:none}.status-tabs{flex-wrap:nowrap;overflow-x:auto}}
+</style>
+</head>
+<body>
+
+<!-- AUTH -->
+<div id="auth-screen">
+  <div class="auth-card">
+    <div class="auth-logo"><h1>Prop<span>Fix</span></h1><p>Property Maintenance Management</p></div>
+    <div class="auth-error" id="auth-error"></div>
+    <div class="form-group"><label>Email address</label><input type="email" id="login-email" placeholder="you@company.com" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <div class="form-group"><label>Password</label><input type="password" id="login-pass" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <button class="btn-auth" onclick="doLogin()">Sign In</button>
+
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div class="topbar">
+    <div class="topbar-left"><span class="topbar-logo">Prop<span>Fix</span></span><span class="role-badge" id="role-badge">—</span></div>
+    <div class="topbar-right"><span class="topbar-user" id="topbar-user"></span><button class="btn-logout" onclick="doLogout()" title="Always sign out when you finish — your session is saved on this device only">Sign out ↩</button></div>
+  </div>
+  <div class="nav-tabs" id="nav-tabs"></div>
+
+  <!-- PAGE: TASKS -->
+  <div class="page" id="page-tasks">
+    <div class="subview-bar" id="task-subview-bar" style="display:none"></div>
+    <div id="task-main-area">
+      <div class="toolbar">
+        <button class="btn btn-primary" id="btn-new-task" onclick="openTaskModal()">+ New Task</button>
+        <input class="search-input" type="text" placeholder="Search..." oninput="setTaskSearch(this.value)">
+        <select class="filter-sel" onchange="setTaskPri(this.value)">
+          <option value="">All priorities</option><option value="Urgent">Urgent</option><option value="Normal">Normal</option><option value="Low">Low</option>
+        </select>
+        <select class="filter-sel" id="filter-assignee" onchange="setTaskAssignee(this.value)" style="display:none"><option value="">All runners</option></select>
+        <select class="filter-sel" id="filter-city" onchange="setTaskCity(this.value)" style="display:none">
+          <option value="">All cities</option>
+          <option value="KL">KL only</option>
+          <option value="JB">JB only</option>
+        </select>
+        <div style="margin-left:auto;display:flex;gap:8px">
+          <button class="btn btn-sm" id="tv-grid-btn" onclick="setTaskViewMode('grid')" style="background:#0c4a6e;color:white;border-color:#0c4a6e">Grid</button>
+          <button class="btn btn-sm" id="tv-list-btn" onclick="setTaskViewMode('list')">List</button>
+        </div>
+      </div>
+      <div class="status-tabs" id="status-tabs">
+        <div class="status-tab active" onclick="setStatusTab('To Do',this)">To Do <span class="status-count" id="sc-todo">0</span></div>
+        <div class="status-tab" onclick="setStatusTab('In Progress',this)">In Progress <span class="status-count" id="sc-inprog">0</span></div>
+        <div class="status-tab" onclick="setStatusTab('Done',this)">Done <span class="status-count" id="sc-done">0</span></div>
+      </div>
+      <div id="tv-grid-view"><div class="task-grid" id="task-grid-container"></div></div>
+      <div id="tv-list-view" style="display:none"><div class="list-wrap"><table class="list-table"><thead><tr id="list-thead-row"></tr></thead><tbody id="task-list-body"></tbody></table></div></div>
+    </div>
+  </div>
+
+  <!-- PAGE: DONE TODAY -->
+  <div class="page" id="page-done">
+    <div class="section-heading">
+      <div><div class="section-title">Daily Report</div><div class="section-sub">Tasks completed on selected date</div></div>
+      <input type="date" id="done-date-picker" class="filter-sel" onchange="renderDoneToday()">
+    </div>
+    <div id="done-today-container"></div>
+  </div>
+
+  <!-- PAGE: PERFORMANCE -->
+  <div class="page" id="page-perf">
+    <div class="perf-controls">
+      <select class="filter-sel" id="perf-month" onchange="renderPerformance()"><option value="">Select month</option></select>
+    </div>
+    <div id="perf-container"></div>
+  </div>
+
+  <!-- PAGE: CALENDAR -->
+  <div class="page" id="page-cal">
+    <div class="cal-wrap">
+      <div class="cal-header">
+        <div class="cal-month" id="cal-month-label"></div>
+        <div class="cal-nav">
+          <button class="cal-nav-btn" onclick="calNav(-1)">‹</button>
+          <button class="cal-nav-btn" onclick="calNav(1)">›</button>
+        </div>
+      </div>
+      <div class="cal-grid" id="cal-grid"></div>
+      <div class="cal-legend">
+        <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#fee2e2"></div>Urgent</div>
+        <div class="cal-legend-item"><div class="cal-legend-dot" style="background:var(--accent-light)"></div>Normal</div>
+        <div class="cal-legend-item"><div class="cal-legend-dot" style="background:var(--brand-light)"></div>Low</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PAGE: USERS -->
+  <div class="page" id="page-users">
+    <div class="section-heading"><div><div class="section-title">Team Members</div></div><button class="btn btn-primary" onclick="openUserModal()">+ Add Member</button></div>
+    <div class="users-grid" id="users-grid"></div>
+  </div>
+
+  <!-- PAGE: PROPERTIES -->
+  <div class="page" id="page-props">
+    <div class="section-heading"><div><div class="section-title">Properties</div></div><button class="btn btn-primary" onclick="openPropModal()">+ Add Property</button></div>
+    <div id="props-stats" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:20px"></div>
+    <div class="props-grid" id="props-grid"></div>
+  </div>
+
+  <!-- PAGE: STATISTICS -->
+  <div class="page" id="page-stat">
+    <div class="section-heading"><div><div class="section-title">Statistics</div><div class="section-sub">Data analysis across all tasks</div></div>
+      <select class="filter-sel" id="stat-city-filter" onchange="renderStats()"><option value="">All Cities</option><option value="KL">KL</option><option value="JB">JB</option></select>
+    </div>
+    <div id="stat-container"></div>
+  </div>
+</div>
+
+<!-- TASK MODAL -->
+<div class="modal-bg" id="modal-task">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title" id="modal-task-title">New Task</span><button class="modal-close" onclick="closeModal('modal-task')">×</button></div>
+    <div class="modal-body">
+      <div class="mfrow">
+        <div class="mfg"><label class="mfl">Category *</label>
+          <select class="mfi" id="f-cat" onchange="toggleLocationFields()">
+            <option>Plumbing</option><option>Leaking</option><option>Electrical</option><option>Cleaning</option>
+            <option>Air-Con</option><option>Refurbish</option><option>Door Knob</option><option>Painting</option>
+            <option>Pest Control</option><option>Note</option><option>Others</option>
+          </select>
+        </div>
+        <div class="mfg"><label class="mfl">Priority *</label>
+          <select class="mfi" id="f-pri"><option value="Urgent">Urgent</option><option value="Normal" selected>Normal</option><option value="Low">Low</option></select>
+        </div>
+      </div>
+      <div id="location-fields" class="loc-box">
+        <div class="loc-box-title">Location</div>
+        <div class="mfg" style="margin-bottom:10px"><label class="mfl">Condo / Property *</label><select class="mfi" id="f-condo" onchange="populateUnitDropdown()"></select></div>
+        <div class="mfrow" style="margin-bottom:0">
+          <div class="mfg" style="margin-bottom:0"><label class="mfl">Unit *</label><select class="mfi" id="f-unit"></select></div>
+          <div class="mfg" style="margin-bottom:0"><label class="mfl">Area / Room</label><input class="mfi" id="f-area" placeholder="e.g. Kitchen, Bedroom 2"></div>
+        </div>
+      </div>
+      <div class="mfg"><label class="mfl-bold">Title *</label><input class="mfi" id="f-title" placeholder="Short task title, e.g. Fix kitchen sink leak"></div>
+      <div class="mfg"><label class="mfl-bold">Description</label><textarea class="mfi" id="f-desc" placeholder="Additional details about the task..."></textarea></div>
+      <div class="mfrow" id="assign-row">
+        <div class="mfg"><label class="mfl">Assign To *</label><select class="mfi" id="f-assign"></select></div>
+        <div class="mfg"><label class="mfl">Status</label><select class="mfi" id="f-status"><option>To Do</option><option>In Progress</option><option>Done</option></select></div>
+      </div>
+      <div class="mfrow">
+        <div class="mfg"><label class="mfl">Schedule Date</label><input class="mfi" type="date" id="f-sched-date"></div>
+        <div class="mfg"><label class="mfl">Schedule Note</label><input class="mfi" type="text" id="f-sched-note" placeholder="e.g. Morning 9am"></div>
+      </div>
+      <div class="mfg"><label class="mfl">Remark</label><input class="mfi" id="f-remark" placeholder="Any additional notes or remarks..."></div>
+    </div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal('modal-task')">Cancel</button><button class="btn btn-primary" onclick="saveTask()">Save Task</button></div>
+  </div>
+</div>
+
+<!-- TASK DETAIL MODAL -->
+<div class="modal-bg" id="modal-detail">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">Task Details</span><button class="modal-close" onclick="closeModal('modal-detail')">×</button></div>
+    <div class="modal-body" id="detail-body"></div>
+    <div class="modal-footer" id="detail-footer"></div>
+  </div>
+</div>
+
+<!-- SCHEDULE MODAL -->
+<div class="modal-bg" id="modal-schedule">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header"><span class="modal-title">Schedule Task</span><button class="modal-close" onclick="closeModal('modal-schedule')">×</button></div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--gray-600);margin-bottom:16px">Set a date for this task.</p>
+      <div class="mfg"><label class="mfl">Scheduled Date *</label><input class="mfi" type="date" id="sched-date"></div>
+      <div class="mfg"><label class="mfl">Note (optional)</label><input class="mfi" type="text" id="sched-note" placeholder="e.g. Morning 9am–12pm"></div>
+    </div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal('modal-schedule')">Cancel</button><button class="btn btn-primary" onclick="saveSchedule()">Confirm</button></div>
+  </div>
+</div>
+
+<!-- USER MODAL -->
+<div class="modal-bg" id="modal-user">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title" id="user-modal-title">Add Team Member</span><button class="modal-close" onclick="closeModal('modal-user')">×</button></div>
+    <div class="modal-body">
+      <div class="mfrow">
+        <div class="mfg"><label class="mfl">Full Name *</label><input class="mfi" id="u-name" placeholder="Ahmad bin Razak"></div>
+        <div class="mfg"><label class="mfl">Role *</label><select class="mfi" id="u-role"><option value="admin">Admin</option><option value="runner">Runner</option></select></div>
+      </div>
+      <div class="mfg"><label class="mfl">Email *</label><input class="mfi" id="u-email" type="email" placeholder="ahmad@company.com"></div>
+      <div class="mfg"><label class="mfl" id="u-pass-label">Password *</label><input class="mfi" id="u-pass" type="password" placeholder="Set a password"><div id="u-pass-hint" style="font-size:11px;color:var(--gray-400);margin-top:3px;display:none">Leave blank to keep current password</div></div>
+      <div class="mfg"><label class="mfl">WhatsApp No.</label><input class="mfi" id="u-wa" placeholder="60123456789"></div>
+    </div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal('modal-user')">Cancel</button><button class="btn btn-primary" id="u-save-btn" onclick="saveUser()">Add Member</button></div>
+  </div>
+</div>
+
+<!-- PROPERTY MODAL -->
+<div class="modal-bg" id="modal-prop">
+  <div class="modal" style="max-width:460px">
+    <div class="modal-header"><span class="modal-title" id="prop-modal-title">Add Property</span><button class="modal-close" onclick="closeModal('modal-prop')">×</button></div>
+    <div class="modal-body">
+      <div class="mfg"><label class="mfl-bold">Condo Name *</label><input class="mfi" id="p-name" placeholder="e.g. Subang Jaya Block C"></div>
+      <div class="mfg"><label class="mfl">City *</label>
+        <select class="mfi" id="p-city">
+          <option value="KL">Kuala Lumpur (KL)</option>
+          <option value="JB">Johor Bahru (JB)</option>
+        </select>
+      </div>
+      <hr style="border:none;border-top:1px solid var(--gray-200);margin:4px 0 14px">
+      <div class="mfg"><label class="mfl-bold">Units</label><p style="font-size:12px;color:var(--gray-500);margin-bottom:8px">One unit per line</p><textarea class="mfi" id="p-units" rows="6" placeholder="A-01&#10;A-02&#10;Level 1 Lobby"></textarea></div>
+    </div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal('modal-prop')">Cancel</button><button class="btn btn-primary" onclick="saveProp()">Save Property</button></div>
+  </div>
+</div>
+
+<!-- CALENDAR TASK POPUP -->
+<div class="cal-popup-bg" id="cal-popup-bg" onclick="if(event.target===this)closeCalPopup()">
+  <div class="cal-popup">
+    <div class="cal-popup-hdr">
+      <div class="cal-popup-title" id="cal-popup-title">Tasks on this day</div>
+      <button class="cal-popup-close" onclick="closeCalPopup()">×</button>
+    </div>
+    <div id="cal-popup-body"></div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+// ═══════════════════ DATA — SUPABASE ═══════════════════
+const SUPA_URL='https://zbxhrsablmmcebywfepm.supabase.co';
+const COMPANY_WA_GROUP=''; // ← paste your WhatsApp group invite link here
+const PROPFIX_URL='https://propfix.netlify.app';
+const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpieGhyc2FibG1tY2VieXdmZXBtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5MzkyODQsImV4cCI6MjA5MDUxNTI4NH0.GyL9zRyB0DA456ZjjGEb-SA4HVRaNxQIDxMARvGZRXA';
+const _cache={};
+
+// ── SESSION: stored per-device in localStorage (never in shared Supabase) ──
+const SESSION_KEY='propfix_session_v1';
+function _getSession(){try{return localStorage.getItem(SESSION_KEY)||null;}catch(e){return null;}}
+function _setSession(v){try{if(v)localStorage.setItem(SESSION_KEY,v);else localStorage.removeItem(SESSION_KEY);}catch(e){}}
+
+const DB={
+  get(k){
+    // session always from localStorage, never Supabase
+    if(k==='session') return _getSession();
+    return _cache[k]!==undefined?_cache[k]:null;
+  },
+  set(k,v){
+    // session always to localStorage, never Supabase
+    if(k==='session'){_setSession(v);return;}
+    _cache[k]=v;
+    _supaSet(k,v);
+  }
+};
+
+// ── Write-lock: prevents auto-refresh from overwriting in-flight saves ──
+let _writeLock=0;
+let _dirtyKeys=new Set(); // keys modified locally but not yet confirmed written to Supabase
+function _lockWrite(key){_writeLock++;if(key)_dirtyKeys.add(key);}
+function _unlockWrite(key){_writeLock=Math.max(0,_writeLock-1);if(key)_dirtyKeys.delete(key);}
+
+// ── SUPABASE WRITE: reliable with retry + write-lock ──
+async function _supaSet(k,v){
+  _lockWrite(k); // mark this key as dirty
+  const body=JSON.stringify({key:k,value:JSON.stringify(v),updated_at:new Date().toISOString()});
+  const headers={'Content-Type':'application/json','apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Prefer':'resolution=merge-duplicates'};
+  for(let attempt=1;attempt<=3;attempt++){
+    try{
+      const r=await fetch(SUPA_URL+'/rest/v1/propfix_data',{method:'POST',headers,body});
+      if(r.ok){_unlockWrite(k);return;} // confirmed — mark clean
+      console.warn('Supabase write attempt',attempt,'status',r.status);
+    }catch(e){
+      console.warn('Supabase write attempt',attempt,'error',e);
+    }
+    if(attempt<3) await new Promise(res=>setTimeout(res,800*attempt));
+  }
+  _unlockWrite(k);
+  showToast('⚠️ Save failed — check your connection');
+}
+
+// ── SUPABASE READ: load everything except session ──
+async function _supaGetAll(){
+  try{
+    const r=await fetch(SUPA_URL+'/rest/v1/propfix_data?select=key,value',{
+      headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY}
+    });
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const rows=await r.json();
+    if(Array.isArray(rows)){
+      rows.forEach(row=>{
+        if(row.key==='session') return; // never from Supabase
+        if(_dirtyKeys.has(row.key)) return; // locally modified — don't overwrite
+        try{
+          const incoming=JSON.parse(row.value);
+          // For 'tasks': merge at per-task level using updatedAt — take the NEWER version of each task
+          // This prevents any user's refresh from overwriting another user's status change
+          if(row.key==='tasks'&&Array.isArray(incoming)&&Array.isArray(_cache['tasks'])){
+            const localMap=new Map(_cache['tasks'].map(t=>[t.id,t]));
+            incoming.forEach(remoteTask=>{
+              const local=localMap.get(remoteTask.id);
+              if(!local){
+                // New task from another user — add it
+                localMap.set(remoteTask.id,remoteTask);
+              } else {
+                // Both exist — keep whichever has the newer updatedAt
+                const localTime=local.updatedAt?new Date(local.updatedAt).getTime():0;
+                const remoteTime=remoteTask.updatedAt?new Date(remoteTask.updatedAt).getTime():0;
+                if(remoteTime>localTime) localMap.set(remoteTask.id,remoteTask);
+              }
+            });
+            // Also remove tasks deleted on remote that aren't in local dirty
+            const remoteIds=new Set(incoming.map(t=>t.id));
+            [...localMap.keys()].forEach(id=>{if(!remoteIds.has(id)) localMap.delete(id);});
+            _cache['tasks']=[...localMap.values()];
+          } else {
+            _cache[row.key]=incoming;
+          }
+        }catch(e){}
+      });
+    }
+  }catch(e){
+    console.warn('Supabase load error',e);
+  }
+}
+function showLoader(){
+  let el=document.getElementById('pf-loader');
+  if(!el){
+    el=document.createElement('div');el.id='pf-loader';
+    el.style.cssText='position:fixed;inset:0;background:#0c4a6e;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;color:white;font-family:DM Sans,sans-serif;gap:16px';
+    el.innerHTML='<div style="font-size:26px;font-weight:600;letter-spacing:-0.5px">Prop<span style="color:#06b6d4">Fix</span></div><div style="font-size:13px;opacity:0.7">Loading your workspace...</div><div style="width:38px;height:38px;border:3px solid rgba(255,255,255,0.2);border-top-color:white;border-radius:50%;animation:spin 0.8s linear infinite"></div>';
+    const s=document.createElement('style');s.textContent='@keyframes spin{to{transform:rotate(360deg)}}';document.head.appendChild(s);
+    document.body.appendChild(el);
+  }
+}
+function hideLoader(){const el=document.getElementById('pf-loader');if(el)el.remove();}
+
+const CAT_CFG={
+  'Plumbing'    :{icon:'🔧',bg:'#dbeafe'},
+  'Leaking'     :{icon:'💧',bg:'#e0f2fe'},
+  'Electrical'  :{icon:'⚡',bg:'#fef9c3'},
+  'Cleaning'    :{icon:'🧹',bg:'#dcfce7'},
+  'Air-Con'     :{icon:'❄️',bg:'#e0e7ff'},
+  'Refurbish'   :{icon:'🔨',bg:'#fce7f3'},
+  'Door Knob'   :{icon:'🔑',bg:'#f3f4f6'},
+  'Painting'    :{icon:'🎨',bg:'#fff7ed'},
+  'Pest Control':{icon:'🐛',bg:'#fef2f2'},
+  'Note'        :{icon:'📝',bg:'#f5f3ff'},
+  'Others'      :{icon:'📋',bg:'#f0fdf4'},
+};
+const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+function initDB(){
+  if(!DB.get('users')) DB.set('users',[
+    {id:'u1',name:'Manager',email:'manager@propfix.com',password:'manager123',role:'manager',wa:''},
+    {id:'u2',name:'Admin Sarah',email:'admin@propfix.com',password:'admin123',role:'admin',wa:'60123456789'},
+    {id:'u3',name:'Admin Lee',email:'admin2@propfix.com',password:'admin123',role:'admin',wa:'60134567890'},
+    {id:'u4',name:'Runner Ali',email:'runner@propfix.com',password:'runner123',role:'runner',wa:'60112345678'},
+    {id:'u5',name:'Runner Mei',email:'runner2@propfix.com',password:'runner123',role:'runner',wa:'60198887777'},
+  ]);
+  const now=new Date().toISOString();
+  const today=now.split('T')[0];
+  if(!DB.get('tasks')) DB.set('tasks',[
+    {id:'t1',condoId:'p1',condo:'Subang Jaya Block C',unit:'A-12-03',area:'Kitchen',category:'Plumbing',priority:'Urgent',title:'Fix leaking sink pipe',desc:'Water pooling under cabinet.',remark:'Tenant called twice.',assigneeId:'u4',assigneeRole:'runner',status:'In Progress',scheduled:'',schedNote:'',createdBy:'u2',mirrorOf:'',createdAt:new Date(Date.now()-7200000).toISOString(),doneAt:''},
+    {id:'t1m',condoId:'p1',condo:'Subang Jaya Block C',unit:'A-12-03',area:'Kitchen',category:'Plumbing',priority:'Urgent',title:'Fix leaking sink pipe',desc:'Water pooling under cabinet.',remark:'Tenant called twice.',assigneeId:'u2',assigneeRole:'admin',status:'In Progress',scheduled:'',schedNote:'',createdBy:'u2',mirrorOf:'t1',createdAt:new Date(Date.now()-7200000).toISOString(),doneAt:''},
+    {id:'t2',condoId:'p2',condo:'Puchong Perdana Tower',unit:'B-05-11',area:'Corridor',category:'Electrical',priority:'Normal',title:'Faulty circuit breaker',desc:'Level 5 units 11-14 affected.',remark:'',assigneeId:'u5',assigneeRole:'runner',status:'To Do',scheduled:'',schedNote:'',createdBy:'u2',mirrorOf:'',createdAt:new Date(Date.now()-86400000).toISOString(),doneAt:''},
+    {id:'t2m',condoId:'p2',condo:'Puchong Perdana Tower',unit:'B-05-11',area:'Corridor',category:'Electrical',priority:'Normal',title:'Faulty circuit breaker',desc:'Level 5 units 11-14 affected.',remark:'',assigneeId:'u2',assigneeRole:'admin',status:'To Do',scheduled:'',schedNote:'',createdBy:'u2',mirrorOf:'t2',createdAt:new Date(Date.now()-86400000).toISOString(),doneAt:''},
+    {id:'t3',condoId:'p3',condo:'Shah Alam Residency',unit:'Lobby Level 1',area:'Main Hall',category:'Cleaning',priority:'Low',title:'Post-renovation deep clean',desc:'Full deep clean after works.',remark:'',assigneeId:'u4',assigneeRole:'runner',status:'Done',scheduled:today,schedNote:'Morning 8am',createdBy:'u3',mirrorOf:'',createdAt:new Date(Date.now()-172800000).toISOString(),doneAt:now},
+    {id:'t3m',condoId:'p3',condo:'Shah Alam Residency',unit:'Lobby Level 1',area:'Main Hall',category:'Cleaning',priority:'Low',title:'Post-renovation deep clean',desc:'Full deep clean after works.',remark:'',assigneeId:'u3',assigneeRole:'admin',status:'Done',scheduled:today,schedNote:'Morning 8am',createdBy:'u3',mirrorOf:'t3',createdAt:new Date(Date.now()-172800000).toISOString(),doneAt:now},
+  ]);
+  if(!DB.get('todos')) DB.set('todos',{});
+  if(!DB.get('props')) DB.set('props',[
+    {id:'p1',name:'Subang Jaya Block C',city:'KL',units:['A-12-01','A-12-02','A-12-03','B-03-01','B-03-02','Level 1 Lobby','Carpark']},
+    {id:'p2',name:'Puchong Perdana Tower',city:'KL',units:['B-05-10','B-05-11','C-08-01','Level 5 Corridor','Rooftop']},
+    {id:'p3',name:'Shah Alam Residency',city:'KL',units:['Lobby Level 1','Lobby Level 2','D-11-01','Pool Area','Gym']},
+  ]);
+  if(!DB.get('nid')) DB.set('nid',100);
+}
+function nextId(){const n=DB.get('nid')||100;DB.set('nid',n+1);return 'id'+n;}
+
+// ═══════════════════ AUTH ═══════════════════
+let CU=null,editTaskId=null,schedTaskId=null;
+let taskSubview='runner'; // for manager: 'runner'|'admin'  for admin: 'runner'|'mine'
+let taskStatusFilter='To Do',taskSearch='',taskPri='',taskAssignee='',taskCity='',taskViewMode='grid';
+let todoStatusFilter='To Do';
+let calYear=new Date().getFullYear(),calMonth=new Date().getMonth();
+
+function doLogin(){
+  const email=document.getElementById('login-email').value.trim().toLowerCase();
+  const pass=document.getElementById('login-pass').value;
+  const u=(DB.get('users')||[]).find(u=>u.email.toLowerCase()===email&&u.password===pass);
+  if(!u){const e=document.getElementById('auth-error');e.textContent='Invalid email or password.';e.style.display='block';return;}
+  document.getElementById('auth-error').style.display='none';
+  CU=u;DB.set('session',u.id);showApp();
+}
+function doLogout(){
+  CU=null;
+  stopAutoRefresh();
+  DB.set('session',null); // clears localStorage session for THIS device
+  document.getElementById('app').style.display='none';
+  document.getElementById('auth-screen').style.display='flex';
+  document.getElementById('login-email').value='';
+  document.getElementById('login-pass').value='';
+  document.getElementById('auth-error').style.display='none';
+}
+function tryAutoLogin(){
+  // session is per-device localStorage — never shared across users
+  const sid=DB.get('session'); // reads from localStorage
+  if(sid){
+    const u=(DB.get('users')||[]).find(x=>x.id===sid);
+    if(u){CU=u;showApp();return;}
+    // session ID exists but user not found — clear stale session
+    DB.set('session',null);
+  }
+  document.getElementById('auth-screen').style.display='flex';
+}
+
+// ═══════════════════ BOOT ═══════════════════
+// ── Auto-refresh: reload Supabase data every 60s to stay in sync ──
+let _refreshTimer=null;
+function startAutoRefresh(){
+  stopAutoRefresh();
+  _refreshTimer=setInterval(async()=>{
+    if(!CU) return;
+    if(_writeLock>0) return; // skip while save in-flight
+    const activeModal=document.querySelector('.modal-bg.open');
+    if(activeModal) return;
+    await _supaGetAll();
+    // Silently re-render current page
+    const activePage=document.querySelector('.page.active');
+    if(activePage){
+      const id=activePage.id;
+      if(id==='page-tasks') renderTasks();
+      if(id==='page-done') renderDoneToday();
+      if(id==='page-perf') renderPerformance();
+      if(id==='page-cal') renderCalendar();
+      if(id==='page-stat') renderStats();
+    }
+  },60000); // every 60 seconds
+}
+function stopAutoRefresh(){if(_refreshTimer){clearInterval(_refreshTimer);_refreshTimer=null;}}
+
+function showApp(){
+  document.getElementById('auth-screen').style.display='none';
+  document.getElementById('app').style.display='flex';
+  document.getElementById('topbar-user').textContent=CU.name;
+  const rb=document.getElementById('role-badge');rb.textContent=CU.role.charAt(0).toUpperCase()+CU.role.slice(1);rb.className='role-badge '+CU.role;
+  buildNav();populateCondoDropdown();populatePerfMonths();startAutoRefresh();
+  document.getElementById('done-date-picker').value=todayStr();
+  setupRole();showPage('page-tasks');
+}
+
+function buildNav(){
+  const r=CU.role;
+  let tabs=[];
+  if(r==='manager') tabs=[{id:'page-tasks',label:'Tasks'},{id:'page-done',label:'Daily Report'},{id:'page-perf',label:'Performance'},{id:'page-cal',label:'Calendar'},{id:'page-props',label:'Properties'},{id:'page-stat',label:'Statistics'},{id:'page-users',label:'Team'}];
+  if(r==='admin')   tabs=[{id:'page-tasks',label:'Tasks'},{id:'page-done',label:'Daily Report'},{id:'page-perf',label:'Performance'},{id:'page-cal',label:'Calendar'},{id:'page-props',label:'Properties'},{id:'page-stat',label:'Statistics'}];
+  if(r==='runner')  tabs=[{id:'page-tasks',label:'Tasks'},{id:'page-done',label:'Daily Report'},{id:'page-perf',label:'Performance'},{id:'page-cal',label:'Calendar'}];
+  document.getElementById('nav-tabs').innerHTML=tabs.map(t=>`<div class="nav-tab" id="tab-${t.id}" onclick="showPage('${t.id}')">${t.label}</div>`).join('');
+}
+
+function setupRole(){
+  const r=CU.role;
+  const svBar=document.getElementById('task-subview-bar');
+  if(r==='manager'){
+    taskSubview='runner';
+    svBar.style.display='flex';
+    svBar.innerHTML=`<button class="subview-btn active" onclick="setTaskSubview('runner',this)">Runner Tasks</button>
+      <button class="subview-btn" onclick="setTaskSubview('admin',this)">Admin Tasks</button>`;
+    document.getElementById('filter-assignee').style.display='block';
+    document.getElementById('filter-city').style.display='';
+    populateRunnerFilter();
+  } else if(r==='admin'){
+    taskSubview='runner';
+    svBar.style.display='flex';
+    svBar.innerHTML=`<button class="subview-btn active" onclick="setTaskSubview('runner',this)">Runner Tasks</button>
+      <button class="subview-btn" onclick="setTaskSubview('mine',this)">My Tasks</button>`;
+    document.getElementById('filter-assignee').style.display='block';
+    document.getElementById('filter-city').style.display='';
+    populateRunnerFilter();
+  } else {
+    svBar.style.display='none';
+    document.getElementById('filter-city').style.display='none';
+  }
+  populateAssignDropdown();
+}
+
+function showPage(id){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  const tab=document.getElementById('tab-'+id);if(tab)tab.classList.add('active');
+  if(id==='page-tasks') renderTasks();
+  if(id==='page-done') renderDoneToday();
+  if(id==='page-perf') renderPerformance();
+  if(id==='page-cal') renderCalendar();
+  if(id==='page-users') renderUsers();
+  if(id==='page-props') renderProps();
+  if(id==='page-stat') renderStats();
+}
+
+// ═══════════════════ UTILS ═══════════════════
+function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function fmtDate(d){if(!d)return'—';try{return new Date(d).toLocaleDateString('en-MY',{day:'numeric',month:'short',year:'numeric'});}catch(e){return d;}}
+function todayStr(){return new Date().toISOString().split('T')[0];}
+function isSameDay(iso,ds){if(!iso||!ds)return false;return iso.split('T')[0]===ds;}
+function isSameMonth(iso,yr,mo){if(!iso)return false;const d=new Date(iso);return d.getFullYear()===yr&&d.getMonth()===mo;}
+function openModal(id){document.getElementById(id).classList.add('open');}
+function closeModal(id){document.getElementById(id).classList.remove('open');}
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
+
+// ── Ripple effect on all clickable elements ──
+document.addEventListener('click',function(e){
+  const el=e.target.closest('.btn,.btn-primary,.btn-sm,.btn-auth,.subview-btn,.status-tab,.nav-tab,.btn-logout,.btn-wa');
+  if(!el)return;
+  const r=document.createElement('span');
+  r.className='ripple';
+  const rect=el.getBoundingClientRect();
+  const sz=Math.max(rect.width,rect.height)*2;
+  r.style.cssText=`width:${sz}px;height:${sz}px;left:${e.clientX-rect.left-sz/2}px;top:${e.clientY-rect.top-sz/2}px`;
+  el.appendChild(r);
+  setTimeout(()=>r.remove(),520);
+});
+
+// ── Stagger card animations ──
+let _suppressStagger=false;
+function staggerCards(){
+  if(_suppressStagger){
+    _suppressStagger=false;
+    // No animation on status change re-render — instant, no delays
+    document.querySelectorAll('.task-card').forEach(c=>{c.style.animationDelay='0ms';});
+    return;
+  }
+  // Stagger animation — cards slide in with delay
+  // NOTE: never disable pointerEvents — that blocks the status dropdown from working
+  document.querySelectorAll('.task-card').forEach((c,i)=>{c.style.animationDelay=`${i*35}ms`;});
+}
+
+// ── Delegated click handlers — safe for any task id ──
+let _statusJustChanged=false; // suppress ghost click after native <select> closes
+document.addEventListener('click',function(e){
+  // If quickStatus just ran, eat this click — it's a ghost from the dropdown closing
+  if(_statusJustChanged){_statusJustChanged=false;return;}
+  // Task card click — exclude status row, buttons, name chips, sched buttons
+  const card=e.target.closest('.task-card[data-tid]');
+  if(card&&!e.target.closest('.tc-status-row')&&!e.target.closest('button')&&!e.target.closest('.tc-names')&&!e.target.closest('select')){
+    openDetail(card.dataset.tid);return;
+  }
+  // List row click
+  const row=e.target.closest('tr[data-tid]');
+  if(row&&!e.target.closest('select')){
+    openDetail(row.dataset.tid);return;
+  }
+});
+
+// ── Delegated change handler for ALL status selects (card, list, detail modal) ──
+document.addEventListener('change',function(e){
+  const sel=e.target.closest('select[data-qid]');
+  if(sel){
+    e.stopPropagation();
+    const taskId=sel.dataset.qid;
+    const newStatus=sel.value;
+    if(taskId&&newStatus) quickStatus(taskId, newStatus);
+    // Stop this change event from bubbling into a click
+    e.preventDefault();
+  }
+});
+function priTagCls(p){return p==='Urgent'?'tag-urgent':p==='Normal'?'tag-normal':'tag-low';}
+function priCardCls(p){return p==='Urgent'?'pri-urgent':p==='Normal'?'pri-normal':'pri-low';}
+function catLogo(cat,size=36,fs=18){const c=CAT_CFG[cat]||{icon:'📋',bg:'#f0fdf4'};return `<div class="cat-logo" style="width:${size}px;height:${size}px;border-radius:${Math.round(size*0.25)}px;background:${c.bg};display:flex;align-items:center;justify-content:center;font-size:${fs}px;flex-shrink:0">${c.icon}</div>`;}
+function sbCls(s){return s==='To Do'?'status-todo':s==='In Progress'?'status-inprog':'status-done';}
+function pinIcon(){return `<svg style="width:14px;height:14px;flex-shrink:0;color:var(--gray-400);margin-top:1px" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`;}
+
+// ═══════════════════ TASKS ═══════════════════
+function getTasksForRole(){
+  const all=DB.get('tasks')||[];
+  const r=CU.role;
+  if(r==='runner') return all.filter(t=>t.assigneeId===CU.id&&!t.mirrorOf); // runners see only assigned tasks (not mirrors)
+  if(r==='admin'){
+    if(taskSubview==='mine'){
+      // Admin's own tasks: tasks assigned to them (incl mirrors) + their personal todos shown via todos key
+      // Here show tasks assigned to this admin (mirrors + direct)
+      return all.filter(t=>t.assigneeId===CU.id);
+    }
+    // Runner tasks subview: only tasks created by this admin assigned to runners
+    return all.filter(t=>t.createdBy===CU.id&&t.assigneeRole==='runner'&&!t.mirrorOf);
+  }
+  // manager
+  if(taskSubview==='runner') return all.filter(t=>t.assigneeRole==='runner'&&!t.mirrorOf);
+  if(taskSubview==='admin') return all.filter(t=>t.assigneeRole==='admin'); // all admin tasks incl mirrors — matches admin's own My Tasks view
+  return all;
+}
+
+function applyFilters(tasks){
+  let t=tasks.filter(x=>x.status===taskStatusFilter);
+  if(taskSearch) t=t.filter(x=>(x.title+x.desc+x.condo+x.unit+x.category).toLowerCase().includes(taskSearch.toLowerCase()));
+  if(taskPri) t=t.filter(x=>x.priority===taskPri);
+  if(taskAssignee) t=t.filter(x=>x.assigneeId===taskAssignee);
+  if(taskCity){
+    // Get property IDs for the selected city
+    const props=DB.get('props')||[];
+    const cityPropIds=new Set(props.filter(p=>taskCity==='KL'?(p.city==='KL'||!p.city):p.city===taskCity).map(p=>p.id));
+    t=t.filter(x=>x.category!=='Note'&&cityPropIds.has(x.condoId)); // Note tasks have no location — hidden when city filter is active
+  }
+  return t;
+}
+
+function renderTasks(){
+  const base=getTasksForRole();
+  // Counts must reflect ALL active filters (assignee + city) — not just raw base
+  let countSet=base;
+  if(taskAssignee) countSet=countSet.filter(t=>t.assigneeId===taskAssignee);
+  if(taskCity){
+    const props=DB.get('props')||[];
+    const cityIds=new Set(props.filter(p=>taskCity==='KL'?(p.city==='KL'||!p.city):p.city===taskCity).map(p=>p.id));
+    countSet=countSet.filter(t=>t.category!=='Note'&&cityIds.has(t.condoId)); // Notes excluded from counts when city filter active
+  }
+  document.getElementById('sc-todo').textContent=countSet.filter(t=>t.status==='To Do').length;
+  document.getElementById('sc-inprog').textContent=countSet.filter(t=>t.status==='In Progress').length;
+  document.getElementById('sc-done').textContent=countSet.filter(t=>t.status==='Done').length;
+  const tasks=applyFilters(base);
+  const isRunner=CU.role==='runner';
+  if(taskViewMode==='grid'){
+    document.getElementById('task-grid-container').innerHTML=tasks.length
+      ?tasks.map(t=>taskCardHTML(t)).join('')
+      :'<div class="empty-state" style="grid-column:1/-1"><p>No tasks here</p><span>Nothing in this status right now.</span></div>';
+    requestAnimationFrame(staggerCards);
+  } else {
+    const aHead=isRunner?'':'<th>Assigned</th>';
+    document.getElementById('list-thead-row').innerHTML=`<th>Task</th><th>Location</th><th>Category</th>${aHead}<th>Priority</th><th>Status</th><th>Scheduled</th><th>Action</th>`;
+    const users=DB.get('users')||[];
+    document.getElementById('task-list-body').innerHTML=tasks.length
+      ?tasks.map(t=>{
+        const a=users.find(u=>u.id===t.assigneeId);
+        const ac=isRunner?'':(`<td>${esc(a?a.name:'—')}</td>`);
+        const loc=t.category==='Note'?'<span style="color:var(--gray-400);font-size:11px">Note</span>':`<strong>${esc(t.condo)}</strong><div style="font-size:11px;color:var(--gray-500)">${esc(t.unit)}${t.area?' · '+esc(t.area):''}</div>`;
+        return `<tr data-tid="${t.id}" style="cursor:pointer">
+          <td><div style="display:flex;align-items:center;gap:8px">${catLogo(t.category,28,14)}<div><span style="font-weight:600">${esc(t.title||t.desc)}</span>${t.title&&t.desc?`<div style="font-size:11px;color:var(--gray-500)">${esc(t.desc.slice(0,50))}</div>`:''}</div></div></td>
+          <td style="font-size:12px">${loc}</td>
+          <td style="font-size:12px">${esc(t.category)}</td>
+          ${ac}
+          <td><span class="tag ${priTagCls(t.priority)}">${t.priority}</span></td>
+          <td><span class="status-badge ${sbCls(t.status)}">${t.status}</span></td>
+          <td style="font-size:12px;color:var(--brand)">${t.scheduled?fmtDate(t.scheduled)+(t.schedNote?`<div style="font-size:10px;color:var(--gray-400)">${esc(t.schedNote)}</div>`:''):'—'}</td>
+          <td onclick="event.stopPropagation()"><select class="status-sel-inline" data-qid="${t.id}" style="font-size:11px;padding:3px 6px;border:1px solid var(--gray-200);border-radius:6px;background:white;color:var(--gray-700)">
+            ${['To Do','In Progress','Done'].map(s=>`<option${s===t.status?' selected':''}>${s}</option>`).join('')}
+          </select></td>
+        </tr>`;
+      }).join('')
+      :`<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--gray-400)">No tasks found</td></tr>`;
+  }
+}
+
+function calcDelayDays(t){
+  if(t.status==='Done'||!t.createdAt) return 0;
+  const c=new Date(t.createdAt);
+  const now=new Date();
+  const cDay=new Date(c.getFullYear(),c.getMonth(),c.getDate());
+  const tDay=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  return Math.floor((tDay-cDay)/(86400000));
+}
+
+function taskCardHTML(t){
+  const users=DB.get('users')||[];
+  const a=users.find(u=>u.id===t.assigneeId);
+  const isRunner=CU.role==='runner';
+  const isOwner=t.assigneeId===CU.id;
+
+  // ── Location block — top, big bold ──
+  const locBlock=t.category==='Note'?'':
+    `<div class="tc-loc">${pinIcon()}<span class="tc-loc-text">${esc(t.condo)} · ${esc(t.unit)}${t.area?' · '+esc(t.area):''}</span></div>`;
+
+  // ── Name chips — full "Role Name" format ──
+  // Build list of people involved: primary assignee + mirror assignee
+  function nameChip(user){
+    if(!user) return '';
+    const cls=user.role==='runner'?'tc-name-runner':user.role==='admin'?'tc-name-admin':'tc-name-manager';
+    const roleLabel=user.role.charAt(0).toUpperCase()+user.role.slice(1);
+    return `<span class="tc-name-chip ${cls}">${roleLabel} ${esc(user.name)}</span>`;
+  }
+  let nameChips='';
+  if(!isRunner){
+    const allT=DB.get('tasks')||[];
+    const mirrorT=t.mirrorOf?allT.find(x=>x.id===t.mirrorOf):allT.find(x=>x.mirrorOf===t.id);
+    const otherUser=mirrorT?users.find(u=>u.id===mirrorT.assigneeId):null;
+    if(otherUser&&otherUser.id!==t.assigneeId){
+      nameChips=nameChip(a)+nameChip(otherUser);
+    } else {
+      nameChips=nameChip(a);
+    }
+  }
+
+  // ── Schedule & actions ──
+  const schedLine=t.scheduled?`<div class="task-sched">📅 ${fmtDate(t.scheduled)}${t.schedNote?' — '+esc(t.schedNote):''}</div>`:'';
+  const canScheduleCard=(isRunner&&isOwner)||(CU.role==='admin')||(CU.role==='manager');
+  const schedBtn=(canScheduleCard&&!t.scheduled)?`<button class="btn btn-sm" style="font-size:10px" onclick="event.stopPropagation();openScheduleModal('${t.id}')">📅 Set Schedule</button>`:
+                 (canScheduleCard&&t.scheduled)?`<button class="btn btn-sm" style="font-size:10px" onclick="event.stopPropagation();openScheduleModal('${t.id}')">📅 Reschedule</button>`:'';
+  const mirrorBadge=t.mirrorOf?`<span class="tc-mirror-badge">Monitoring</span>`:'';
+  const delayDays=calcDelayDays(t);
+  const delayBadge=delayDays>=1
+    ?`<div class="tc-delay ${delayDays>=3?'tc-delay-red':'tc-delay-amber'}">⏰ Delay: ${delayDays} day${delayDays>1?'s':''}</div>`
+    :'';
+  const statusDate=t.updatedAt?fmtDate(t.updatedAt):(t.createdAt?fmtDate(t.createdAt):'');
+  const statusRow=`<div class="tc-status-row" onclick="event.stopPropagation()">
+    <select class="status-sel-inline" data-qid="${t.id}">
+      ${['To Do','In Progress','Done'].map(s=>`<option${s===t.status?' selected':''}>${s}</option>`).join('')}
+    </select>
+    ${statusDate?`<span style="font-size:10px;color:var(--gray-400);margin-left:4px;white-space:nowrap">${statusDate}</span>`:''}
+  </div>`;
+
+  // ── NEW LAYOUT: location (top, bold) → title → description → names → footer ──
+  return `<div class="task-card ${priCardCls(t.priority)}" data-tid="${t.id}">
+    <div class="tc-top">${catLogo(t.category)}<div style="flex:1;min-width:0">
+      ${locBlock}
+      <div class="tc-title">${esc(t.title||t.desc)}</div>
+      ${t.title&&t.desc?`<div class="tc-desc">${esc(t.desc)}</div>`:''}
+    </div></div>
+    ${nameChips?`<div class="tc-names" onclick="event.stopPropagation()">${nameChips}${mirrorBadge}</div>`:''}
+    <div class="tc-bottom">
+      <div class="tc-meta"><span class="tag ${priTagCls(t.priority)}">${t.priority}</span>${delayBadge}</div>
+      ${schedLine||schedBtn?`<div style="display:flex;align-items:center;gap:5px">${schedLine}${schedBtn}</div>`:''}
+    </div>
+    ${statusRow}
+  </div>`;
+}
+
+function setTaskSubview(sv,el){
+  taskSubview=sv;
+  taskAssignee=''; // reset filter when switching tabs — fixes empty task bug
+  taskCity='';
+  const cf2=document.getElementById('filter-city');if(cf2)cf2.value='';
+  document.querySelectorAll('#task-subview-bar .subview-btn').forEach(b=>b.classList.remove('active'));el.classList.add('active');
+  taskStatusFilter='To Do';
+  document.querySelectorAll('#status-tabs .status-tab').forEach((t,i)=>{t.classList.toggle('active',i===0);});
+  // Filter visibility
+  const af=document.getElementById('filter-assignee');
+  if(sv==='mine'){af.style.display='none';}
+  else{
+    af.style.display='block';
+    af.value=''; // reset dropdown UI
+    populateRunnerFilter();
+  }
+  renderTasks();
+}
+function setStatusTab(s,el){taskStatusFilter=s;document.querySelectorAll('#status-tabs .status-tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderTasks();}
+function setTaskSearch(v){taskSearch=v;renderTasks();}
+function setTaskPri(v){taskPri=v;renderTasks();}
+function setTaskAssignee(v){taskAssignee=v;renderTasks();}
+function setTaskCity(v){taskCity=v;renderTasks();}
+function setTaskViewMode(v){
+  taskViewMode=v;
+  document.getElementById('tv-grid-view').style.display=v==='grid'?'block':'none';
+  document.getElementById('tv-list-view').style.display=v==='list'?'block':'none';
+  document.getElementById('tv-grid-btn').style.cssText=v==='grid'?'background:#0c4a6e;color:white;border-color:#0c4a6e':'';
+  document.getElementById('tv-list-btn').style.cssText=v==='list'?'background:#0c4a6e;color:white;border-color:#0c4a6e':'';
+  renderTasks();
+}
+
+function quickStatus(id,status){
+  if(!id||!['To Do','In Progress','Done'].includes(status)) return;
+  const tasks=DB.get('tasks')||[];const t=tasks.find(x=>x.id===id);
+  if(!t) return;
+  const now=new Date().toISOString();
+  t.status=status;t.updatedAt=now;t.doneAt=status==='Done'?now:'';
+  if(!t.mirrorOf){
+    const mirror=tasks.find(m=>m.mirrorOf===id);
+    if(mirror){mirror.status=status;mirror.updatedAt=now;mirror.doneAt=t.doneAt;}
+  }
+  if(t.mirrorOf){
+    const orig=tasks.find(o=>o.id===t.mirrorOf);
+    if(orig){orig.status=status;orig.updatedAt=now;orig.doneAt=t.doneAt;}
+  }
+  // 1. Mark tasks as dirty and update cache — auto-refresh will NOT overwrite this
+  _dirtyKeys.add('tasks');
+  _cache['tasks']=tasks;
+  // 2. Flag to suppress the ghost click Chrome fires when native <select> closes
+  _statusJustChanged=true;
+  setTimeout(()=>{_statusJustChanged=false;},350); // safety reset if click never fires
+  // 3. Re-render immediately — card moves to correct tab NOW
+  _suppressStagger=true;
+  renderTasks();
+  // 4. Write to Supabase (async) — when confirmed, 'tasks' removed from dirty set
+  _supaSet('tasks',tasks);
+  showToast('Status updated!');
+}
+function deleteTask(id){
+  if(!confirm('Delete this task?'))return;
+  const tasks=DB.get('tasks')||[];
+  const t=tasks.find(x=>x.id===id);
+  let remaining=tasks.filter(x=>x.id!==id);
+  // delete mirror too
+  if(t&&!t.mirrorOf) remaining=remaining.filter(x=>x.mirrorOf!==id);
+  if(t&&t.mirrorOf) remaining=remaining.filter(x=>x.id!==t.mirrorOf);
+  DB.set('tasks',remaining);closeModal('modal-detail');renderTasks();showToast('Deleted');
+}
+
+// ═══════════════════ TASK MODAL ═══════════════════
+function toggleLocationFields(){
+  const cat=document.getElementById('f-cat').value;
+  document.getElementById('location-fields').style.display=cat==='Note'?'none':'block';
+}
+
+function openTaskModal(id){
+  editTaskId=id||null;
+  const r=CU.role;
+
+  // Determine assign target
+  if(r==='runner'){
+    // Runner assigns to self — hide assign row
+    document.getElementById('assign-row').style.display='none';
+  } else if(r==='admin'){
+    document.getElementById('assign-row').style.display='grid';
+    if(taskSubview==='mine'){
+      // Admin creates for self — hide assign, set to self
+      document.getElementById('assign-row').style.display='none';
+    } else {
+      populateAssignDropdown('runner');
+    }
+  } else {
+    // Manager
+    document.getElementById('assign-row').style.display='grid';
+    populateAssignDropdown(taskSubview==='admin'?'admin':'runner');
+  }
+
+  document.getElementById('modal-task-title').textContent=id?'Edit Task':'New Task';
+  if(id){
+    const t=(DB.get('tasks')||[]).find(x=>x.id===id);
+    if(t){
+      // When editing: always show assign row so admin/manager can re-assign
+      if(r!=='runner'){
+        document.getElementById('assign-row').style.display='grid';
+        // Admin editing runner task → show runners; admin editing own task → show admins
+        // Manager → show all non-managers
+        if(r==='admin') populateAssignDropdown(t.assigneeRole==='runner'?'runner':'admin');
+        else populateAssignDropdown('all');
+      }
+      document.getElementById('f-title').value=t.title||'';
+      document.getElementById('f-desc').value=t.desc||'';
+      document.getElementById('f-cat').value=t.category;toggleLocationFields();
+      document.getElementById('f-pri').value=t.priority;
+      document.getElementById('f-condo').value=t.condoId||'';populateUnitDropdown();
+      setTimeout(()=>document.getElementById('f-unit').value=t.unit||'',50);
+      document.getElementById('f-area').value=t.area||'';
+      const fa=document.getElementById('f-assign');if(fa.options.length) fa.value=t.assigneeId;
+      document.getElementById('f-status').value=t.status;
+      document.getElementById('f-sched-date').value=t.scheduled||'';
+      document.getElementById('f-sched-note').value=t.schedNote||'';
+      document.getElementById('f-remark').value=t.remark||'';
+    }
+  } else {
+    ['f-title','f-desc','f-area','f-sched-date','f-sched-note','f-remark'].forEach(i=>document.getElementById(i).value='');
+    document.getElementById('f-status').value='To Do';
+    toggleLocationFields();populateUnitDropdown();
+  }
+  openModal('modal-task');
+}
+
+function saveTask(){
+  const r=CU.role;
+  const title=document.getElementById('f-title').value.trim();
+  const desc=document.getElementById('f-desc').value.trim();
+  if(!title){showToast('Please enter a task title');return;}
+  const cat=document.getElementById('f-cat').value;
+  const isNote=cat==='Note';
+  const condoId=isNote?'':document.getElementById('f-condo').value;
+  const unit=isNote?'':document.getElementById('f-unit').value;
+  if(!isNote&&(!condoId||!unit)){showToast('Please select condo and unit');return;}
+
+  let assigneeId='';
+  if(r==='runner') assigneeId=CU.id;
+  else if(r==='admin'&&taskSubview==='mine') assigneeId=CU.id;
+  else{assigneeId=document.getElementById('f-assign').value;if(!assigneeId){showToast('Please select assignee');return;}}
+
+  const props=DB.get('props')||[];const prop=props.find(p=>p.id===condoId);
+  const users=DB.get('users')||[];const assignee=users.find(u=>u.id===assigneeId);
+  const now=new Date().toISOString();
+  const newStatus=document.getElementById('f-status').value;
+  const tasks=DB.get('tasks')||[];
+
+  const base={
+    condoId:isNote?'':condoId,condo:isNote?'':(prop?prop.name:''),
+    unit:isNote?'':unit,area:isNote?'':document.getElementById('f-area').value.trim(),
+    title,desc,category:cat,priority:document.getElementById('f-pri').value,
+    assigneeId,assigneeRole:assignee?assignee.role:'runner',
+    status:newStatus,
+    scheduled:document.getElementById('f-sched-date').value,
+    schedNote:document.getElementById('f-sched-note').value.trim(),
+    remark:document.getElementById('f-remark').value.trim(),
+    updatedAt:now,
+    doneAt:newStatus==='Done'?now:'',
+  };
+
+  if(editTaskId){
+    const idx=tasks.findIndex(t=>t.id===editTaskId);
+    if(idx>-1){
+      if(tasks[idx].status!=='Done'&&newStatus==='Done') base.doneAt=now;
+      else if(newStatus!=='Done') base.doneAt='';
+      const oldAssigneeId=tasks[idx].assigneeId;
+      tasks[idx]={...tasks[idx],...base};
+      // Sync mirror: update content but keep its own assignee
+      const mid=tasks[idx].mirrorOf;
+      const mirrorIdx=mid?tasks.findIndex(t=>t.id===mid):tasks.findIndex(t=>t.mirrorOf===editTaskId);
+      if(mirrorIdx>-1){
+        tasks[mirrorIdx]={...tasks[mirrorIdx],...base,
+          assigneeId:tasks[mirrorIdx].assigneeId,
+          assigneeRole:tasks[mirrorIdx].assigneeRole,
+          mirrorOf:tasks[mirrorIdx].mirrorOf};
+      }
+      // If assignee changed on a runner task, update the mirror's source reference
+      if(base.assigneeId!==oldAssigneeId&&mirrorIdx>-1&&!mid){
+        // runner task reassigned — mirror stays with original admin creator
+      }
+    }
+    DB.set('tasks',tasks);closeModal('modal-task');renderTasks();showToast('Task updated!');
+    return;
+  }
+
+  // New task
+  const newId=nextId();
+  const task={id:newId,createdBy:CU.id,mirrorOf:'',createdAt:now,...base};
+  tasks.push(task);
+
+  // Auto-create mirror for admin when assigning to runner
+  if(r==='admin'&&assignee&&assignee.role==='runner'){
+    const mirrorId=nextId();
+    tasks.push({...task,id:mirrorId,assigneeId:CU.id,assigneeRole:'admin',mirrorOf:newId,createdAt:now});
+  }
+  // Manager creating for runner/admin — no mirror needed (manager monitors via tasks tab)
+
+  DB.set('tasks',tasks);closeModal('modal-task');renderTasks();showToast('Task created!');
+}
+
+// ═══════════════════ TASK DETAIL ═══════════════════
+function openDetail(id){
+  const tasks=DB.get('tasks')||[];const t=tasks.find(x=>x.id===id);if(!t)return;
+  const users=DB.get('users')||[];const a=users.find(u=>u.id===t.assigneeId);
+  const aName=a?a.name:'Unassigned';
+  const canEdit=CU.role==='manager'||CU.role==='admin';
+  const isRunnerOwner=CU.role==='runner'&&t.assigneeId===CU.id;
+  const cfg=CAT_CFG[t.category]||{icon:'📋',bg:'#f0fdf4'};
+  const locBlock=t.category==='Note'?'':
+    `<div><div class="detail-label">Location</div><div style="font-size:13px;font-weight:700;margin-top:2px">${esc(t.condo)} · ${esc(t.unit)}${t.area?` · ${esc(t.area)}`:''}</div></div>`;
+  const remarkBlock=t.remark?`<div style="background:var(--brand-bg);border-radius:var(--radius);padding:10px 12px;margin-top:10px;font-size:12px;color:var(--brand-dark)"><strong>Remark:</strong> ${esc(t.remark)}</div>`:'';
+  const mirrorNote=t.mirrorOf?`<div style="font-size:11px;color:var(--brand);margin-bottom:8px">📋 Monitoring task — original assigned to runner</div>`:'';
+
+  document.getElementById('detail-body').innerHTML=`
+    ${mirrorNote}
+    <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:16px">
+      <div style="width:48px;height:48px;border-radius:12px;background:${cfg.bg};display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0">${cfg.icon}</div>
+      <div><div style="font-size:16px;font-weight:700;color:var(--gray-900);line-height:1.3">${esc(t.title||t.desc)}</div>
+      ${t.title&&t.desc?`<div style="font-size:13px;color:var(--gray-600);margin-top:4px">${esc(t.desc)}</div>`:''}
+      <div style="margin-top:6px"><span class="tag ${priTagCls(t.priority)}">${t.priority}</span></div></div>
+    </div>
+    <div class="detail-grid">
+      <div><div class="detail-label">Category</div><div style="display:flex;align-items:center;gap:6px;margin-top:2px"><span>${cfg.icon}</span><span>${esc(t.category)}</span></div></div>
+      <div><div class="detail-label">Status</div><span class="status-badge ${sbCls(t.status)}" style="margin-top:2px;display:inline-block">${t.status}</span></div>
+      <div><div class="detail-label">Assigned To</div><div style="font-size:13px;font-weight:500;margin-top:2px">${esc(aName)}</div></div>
+      ${locBlock}
+    </div>
+    ${remarkBlock}
+    ${t.scheduled?`<div class="sched-banner"><span>📅</span><div><strong>Scheduled: ${fmtDate(t.scheduled)}</strong>${t.schedNote?`<div style="font-size:12px;margin-top:2px">${esc(t.schedNote)}</div>`:''}</div></div>`:''}
+    <div class="mfg" style="margin-top:14px"><label class="mfl">Update Status</label>
+      <select class="mfi" data-qid="${t.id}">
+        ${['To Do','In Progress','Done'].map(s=>`<option${s===t.status?' selected':''}>${s}</option>`).join('')}
+      </select>
+    </div>
+    <div style="font-size:11px;color:var(--gray-400);margin-top:8px">Created: ${fmtDate(t.createdAt)}${t.doneAt?' · Done: '+fmtDate(t.doneAt):''}</div>`;
+
+  // Build WhatsApp message as plain text first, then encode the whole thing once
+  // This preserves emojis, separators, and makes URLs clickable in WhatsApp
+  const appLink=(typeof PROPFIX_URL!=='undefined'&&PROPFIX_URL)?PROPFIX_URL.replace(/\/+$/,''):'';
+  const taskLink=appLink?(appLink+'?task='+t.id):'';
+  const locStr=t.condo?(t.condo+' · '+t.unit+(t.area?' · '+t.area:'')):'';
+  const sep='━━━━━━━━━━';
+  const div='- - - - - - - - - - - - - - -';
+
+  const msgLines=[
+    '🅿 PropFix',
+    sep,
+    locStr?'📍 '+locStr:'',
+    '🏷️ '+(t.title||t.desc),
+    t.desc&&t.title?'📋 '+t.desc:'',
+    t.remark?'📝 '+t.remark:'',
+    div,
+    '🔧 category : '+(t.category||''),
+    '⚡ priority : '+(t.priority||''),
+    '👤 assign : '+aName,
+    t.scheduled?'📅 schedule : '+fmtDate(t.scheduled):'',
+    sep,
+    'Sent from PropFix',
+    taskLink, // raw URL — not encoded so WhatsApp makes it a clickable link
+  ].filter(Boolean).join('\n');
+
+  // Encode entire message once — WhatsApp decodes correctly, emojis show up fine
+  const waMsg=encodeURIComponent(msgLines);
+  const waUrl=COMPANY_WA_GROUP?(COMPANY_WA_GROUP+'&text='+waMsg):('https://wa.me/?text='+waMsg);
+
+  document.getElementById('detail-footer').innerHTML=`
+    <button class="btn btn-wa" onclick="window.open('${waUrl}','_blank')">
+      <svg class="wa-icon" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+      WhatsApp
+    </button>
+    ${(isRunnerOwner||canEdit)&&!t.scheduled?`<button class="btn" onclick="closeModal('modal-detail');openScheduleModal('${t.id}')">📅 Schedule</button>`:''}
+    ${(isRunnerOwner||canEdit)&&t.scheduled?`<button class="btn" onclick="closeModal('modal-detail');openScheduleModal('${t.id}')">📅 Reschedule</button>`:''}
+    ${canEdit?`<button class="btn" onclick="closeModal('modal-detail');openTaskModal('${t.id}')">Edit</button>`:''}
+    ${canEdit?`<button class="btn btn-danger" onclick="deleteTask('${t.id}')">Delete</button>`:''}`;
+  openModal('modal-detail');
+}
+
+// ═══════════════════ SCHEDULE ═══════════════════
+function openScheduleModal(taskId){
+  schedTaskId=taskId;
+  const tasks=DB.get('tasks')||[];const t=tasks.find(x=>x.id===taskId);
+  document.getElementById('sched-date').value=t&&t.scheduled?t.scheduled:'';
+  document.getElementById('sched-note').value=t&&t.schedNote?t.schedNote:'';
+  openModal('modal-schedule');
+}
+function saveSchedule(){
+  const date=document.getElementById('sched-date').value;if(!date){showToast('Please select a date');return;}
+  const tasks=DB.get('tasks')||[];const t=tasks.find(x=>x.id===schedTaskId);
+  if(t){t.scheduled=date;t.schedNote=document.getElementById('sched-note').value.trim();t.updatedAt=new Date().toISOString();}
+  DB.set('tasks',tasks);closeModal('modal-schedule');renderTasks();if(typeof renderCalendar==='function')renderCalendar();showToast('Scheduled for '+fmtDate(date));
+}
+
+// ═══════════════════ ADMIN PERSONAL TODO ═══════════════════
+function getTodos(){const a=DB.get('todos')||{};return a[CU.id]||[];}
+function setTodos(list){const a=DB.get('todos')||{};a[CU.id]=list;DB.set('todos',a);}
+function addTodo(){
+  const inp=document.getElementById('todo-input');const text=inp.value.trim();if(!text)return;
+  const todos=getTodos();todos.push({id:nextId(),text,status:'To Do',createdAt:new Date().toISOString(),doneAt:''});
+  setTodos(todos);inp.value='';updateTodoCounts();renderTodos();
+}
+function updateTodoStatus(id,status){
+  const todos=getTodos();const t=todos.find(x=>x.id===id);
+  if(t){t.status=status;t.doneAt=status==='Done'?new Date().toISOString():'';}
+  setTodos(todos);updateTodoCounts();renderTodos();
+}
+function deleteTodo(id){setTodos(getTodos().filter(x=>x.id!==id));updateTodoCounts();renderTodos();}
+function setTodoTab(s,el){todoStatusFilter=s;document.querySelectorAll('#page-todo .status-tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderTodos();}
+function updateTodoCounts(){
+  const todos=getTodos();
+  const sc=['tsc-todo','tsc-inprog','tsc-done'];
+  const vals=[todos.filter(t=>t.status==='To Do').length,todos.filter(t=>t.status==='In Progress').length,todos.filter(t=>t.status==='Done').length];
+  sc.forEach((id,i)=>{const el=document.getElementById(id);if(el)el.textContent=vals[i];});
+}
+function renderTodos(){
+  const todos=getTodos().filter(t=>t.status===todoStatusFilter);
+  const el=document.getElementById('todo-list');if(!el)return;
+  el.innerHTML=todos.length
+    ?todos.map(t=>`<div class="todo-item ${t.status==='In Progress'?'ti-inprog':t.status==='Done'?'ti-done':''}">
+        <div class="todo-text${t.status==='Done'?' done':''}">${esc(t.text)}</div>
+        <select class="todo-status-sel" onchange="updateTodoStatus('${t.id}',this.value)">
+          ${['To Do','In Progress','Done'].map(s=>`<option${s===t.status?' selected':''}>${s}</option>`).join('')}
+        </select>
+        <button class="todo-del" onclick="deleteTodo('${t.id}')">✕</button>
+      </div>`).join('')
+    :'<div style="text-align:center;padding:20px;font-size:13px;color:var(--gray-400)">No tasks in this status.</div>';
+}
+
+// ═══════════════════ DONE TODAY ═══════════════════
+function renderDoneToday(){
+  const dateStr=document.getElementById('done-date-picker').value||todayStr();
+  const tasks=DB.get('tasks')||[];
+  const todos=DB.get('todos')||{};
+  const users=DB.get('users')||[];
+  const r=CU.role;
+
+  function doneItemHTML(icon,bg,title,sub,who){
+    return `<div class="done-item"><div class="done-check">✓</div><div style="width:30px;height:30px;border-radius:8px;background:${bg};display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">${icon}</div><div class="done-info"><div class="done-desc">${esc(title)}</div><div class="done-sub">${esc(sub)}</div></div>${who?`<span class="done-who">${esc(who)}</span>`:''}</div>`;
+  }
+  function makeSection(title,items){
+    return `<div class="person-section"><div class="person-header"><span class="person-name">${title}</span><span class="person-count">${items.length}</span></div>${items.length?`<div class="done-panel">${items.join('')}</div>`:'<div style="font-size:13px;color:var(--gray-400);padding:10px 16px">No tasks completed.</div>'}</div>`;
+  }
+
+  if(r==='manager'){
+    // Show each person individually
+    const targets=users.filter(u=>u.role!=='manager');
+    const html=targets.map(u=>{
+      const items=[];
+      // Assigned tasks done by this person (non-mirror for runners, mirrors for admins)
+      const doneTasks=tasks.filter(t=>t.assigneeId===u.id&&isSameDay(t.doneAt,dateStr)&&(u.role==='runner'?!t.mirrorOf:true));
+      doneTasks.forEach(t=>{const cfg=CAT_CFG[t.category]||{icon:'📋',bg:'#f0fdf4'};items.push(doneItemHTML(cfg.icon,cfg.bg,t.title||t.desc,t.condo?(t.condo+' · '+t.unit+(t.area?' · '+t.area:'')):'Note',''));});
+      // Personal todos for admins
+      if(u.role==='admin'){
+        (todos[u.id]||[]).filter(t=>isSameDay(t.doneAt,dateStr)).forEach(t=>items.push(doneItemHTML('📝','#f5f3ff',t.text,'Personal task','')));
+      }
+      return makeSection(u.name+` (${u.role})`,items);
+    }).join('');
+    document.getElementById('done-today-container').innerHTML=html;
+  } else if(r==='admin'){
+    // Admin sees: each runner individually (ALL runners, not just ones they created tasks for)
+    //             + their own completed tasks
+    //             does NOT see other admins' tasks
+    const runners=users.filter(u=>u.role==='runner');
+    let html='';
+    runners.forEach(runner=>{
+      // All runner tasks done by this runner today (non-mirror only)
+      const doneTasks=tasks.filter(t=>t.assigneeId===runner.id&&!t.mirrorOf&&isSameDay(t.doneAt,dateStr));
+      const items=doneTasks.map(t=>{const cfg=CAT_CFG[t.category]||{icon:'📋',bg:'#f0fdf4'};return doneItemHTML(cfg.icon,cfg.bg,t.title||t.desc,t.condo?(t.condo+' · '+t.unit+(t.area?' · '+t.area:'')):'Note','');});
+      html+=makeSection('Runner '+runner.name,items);
+    });
+    // Admin's own done tasks (non-mirror direct assignments + their mirror monitoring tasks + personal todos)
+    const myDone=tasks.filter(t=>t.assigneeId===CU.id&&!t.mirrorOf&&isSameDay(t.doneAt,dateStr));
+    const myTodos=(todos[CU.id]||[]).filter(t=>isSameDay(t.doneAt,dateStr));
+    const myItems=[
+      ...myDone.map(t=>{const cfg=CAT_CFG[t.category]||{icon:'📋',bg:'#f0fdf4'};return doneItemHTML(cfg.icon,cfg.bg,t.title||t.desc,t.condo?(t.condo+' · '+t.unit+(t.area?' · '+t.area:'')):'Note','');}),
+      ...myTodos.map(t=>doneItemHTML('📝','#f5f3ff',t.text,'Personal task',''))
+    ];
+    html+=makeSection('My Completed Tasks ('+CU.name+')',myItems);
+    document.getElementById('done-today-container').innerHTML=html;
+  } else {
+    // Runner own done
+    const items=tasks.filter(t=>t.assigneeId===CU.id&&!t.mirrorOf&&isSameDay(t.doneAt,dateStr)).map(t=>{const cfg=CAT_CFG[t.category]||{icon:'📋',bg:'#f0fdf4'};return doneItemHTML(cfg.icon,cfg.bg,t.title||t.desc,t.condo?(t.condo+' · '+t.unit+(t.area?' · '+t.area:'')):'Note','');});
+    document.getElementById('done-today-container').innerHTML=makeSection('My Completed Tasks',items);
+  }
+}
+
+// ═══════════════════ PERFORMANCE ═══════════════════
+function populatePerfMonths(){
+  const sel=document.getElementById('perf-month');if(!sel)return;
+  const now=new Date();let opts='';
+  for(let i=0;i<12;i++){
+    const d=new Date(now.getFullYear(),now.getMonth()-i,1);
+    opts+=`<option value="${d.getFullYear()}-${d.getMonth()}"${i===0?' selected':''}>${MONTHS[d.getMonth()]} ${d.getFullYear()}</option>`;
+  }
+  sel.innerHTML=opts;
+}
+
+function drawPie(canvasId, doneCount, totalAssigned){
+  const canvas=document.getElementById(canvasId);if(!canvas)return;
+  const ctx=canvas.getContext('2d');
+  const W=canvas.width,H=canvas.height,cx=W/2,cy=H/2;
+  const R=Math.round(Math.min(W,H)*0.40);
+  const inner=Math.round(R*0.60);
+  const pct=totalAssigned>0?Math.round((doneCount/totalAssigned)*100):0;
+  const targetAngle=totalAssigned>0?(doneCount/totalAssigned)*Math.PI*2:0;
+  const fs=Math.max(Math.round(R*0.38),11);
+
+  // Easing: ease-out cubic
+  function easeOut(t){return 1-Math.pow(1-t,3);}
+
+  // Draw one frame at progress 0..1
+  function frame(t){
+    const prog=easeOut(Math.min(t,1));
+    const sweepAngle=targetAngle*prog;
+    const displayPct=Math.round(pct*prog);
+
+    ctx.clearRect(0,0,W,H);
+
+    // Shadow glow on done segment
+    ctx.save();
+    ctx.shadowColor='rgba(8,145,178,0.30)';
+    ctx.shadowBlur=8;
+
+    if(totalAssigned===0){
+      ctx.beginPath();ctx.arc(cx,cy,R,0,Math.PI*2);ctx.fillStyle='#e2e8f0';ctx.fill();
+    } else {
+      // Background (remaining) — always full circle first
+      ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,R,0,Math.PI*2);ctx.closePath();ctx.fillStyle='#e2e8f0';ctx.fill();
+      // Done segment sweeps in from top
+      if(sweepAngle>0){
+        ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,R,-Math.PI/2,-Math.PI/2+sweepAngle);ctx.closePath();
+        // Gradient fill for done segment
+        const grad=ctx.createLinearGradient(cx-R,cy-R,cx+R,cy+R);
+        grad.addColorStop(0,'#06b6d4');
+        grad.addColorStop(1,'#0e7490');
+        ctx.fillStyle=grad;ctx.fill();
+      }
+    }
+    ctx.restore();
+
+    // Donut hole — white with soft inner shadow
+    ctx.save();
+    ctx.shadowColor='rgba(0,0,0,0.06)';
+    ctx.shadowBlur=4;
+    ctx.beginPath();ctx.arc(cx,cy,inner,0,Math.PI*2);ctx.fillStyle='white';ctx.fill();
+    ctx.restore();
+
+    // Percentage text — counts up with the animation
+    ctx.fillStyle='#0f172a';
+    ctx.font=`700 ${fs}px DM Sans,sans-serif`;
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(displayPct+'%',cx,cy);
+  }
+
+  // Animate over 700ms
+  const duration=700;
+  const start=performance.now();
+  function animate(now){
+    const elapsed=now-start;
+    frame(elapsed/duration);
+    if(elapsed<duration) requestAnimationFrame(animate);
+    else frame(1); // ensure final frame is exact
+  }
+  requestAnimationFrame(animate);
+}
+
+function renderPerformance(){
+  const monthSel=document.getElementById('perf-month');
+  const monthVal=monthSel?monthSel.value:'';
+  const now=new Date();
+  let selYr=now.getFullYear(),selMo=now.getMonth();
+  if(monthVal){[selYr,selMo]=monthVal.split('-').map(Number);}
+  const monthLabel=MONTHS[selMo]+' '+selYr;
+
+  const tasks=DB.get('tasks')||[];
+  const todos=DB.get('todos')||{};
+  const users=DB.get('users')||[];
+  const r=CU.role;
+
+  function getMemberStats(userId,isAdmin){
+    // For admin: count original runner tasks they created + tasks assigned to them (excl mirrors to avoid double counting)
+    // Mirror tasks are monitoring copies — should NOT count as separate tasks for performance
+    let allTasks=isAdmin
+      ? tasks.filter(t=>(t.createdBy===userId&&t.assigneeRole==='runner'&&!t.mirrorOf) // runner tasks admin created
+          ||(t.assigneeId===userId&&t.assigneeRole==='admin'&&!t.mirrorOf)              // tasks manager assigned to admin
+          ||(t.assigneeId===userId&&t.mirrorOf))                                        // admin's own mirror copies (monitoring)
+      : tasks.filter(t=>t.assigneeId===userId&&!t.mirrorOf);
+    const seen=new Set();
+    allTasks=allTasks.filter(t=>{if(seen.has(t.id))return false;seen.add(t.id);return true;});
+    const myTodos=isAdmin?(todos[userId]||[]):[];
+
+    // B1: total assigned all time
+    const b1=allTasks.length+myTodos.length;
+
+    // B2: pending (To Do + In Progress) — no month filter
+    const b2=allTasks.filter(t=>t.status==='To Do'||t.status==='In Progress').length
+            +myTodos.filter(t=>t.status==='To Do'||t.status==='In Progress').length;
+
+    // B3: done THIS month (filter by doneAt)
+    const b3=allTasks.filter(t=>t.doneAt&&isSameMonth(t.doneAt,selYr,selMo)).length
+            +myTodos.filter(t=>t.doneAt&&isSameMonth(t.doneAt,selYr,selMo)).length;
+
+    // B4: assigned THIS month (filter by createdAt)
+    const b4=allTasks.filter(t=>t.createdAt&&isSameMonth(t.createdAt,selYr,selMo)).length
+            +myTodos.filter(t=>t.createdAt&&isSameMonth(t.createdAt,selYr,selMo)).length;
+
+    // A (pie): this month assigned vs done
+    const pieTotal=Math.max(b4,b3); // in case more done than assigned (edge)
+    const pieDone=b3;
+
+    return {b1,b2,b3,b4,pieTotal,pieDone};
+  }
+
+  function memberCard(user,st,pid,pidOverall){
+    const sz=120;
+    const ini=user.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+    return `<div style="background:var(--white);border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:20px;border:1px solid var(--gray-200);display:flex;flex-direction:column;gap:16px">
+      <!-- Header -->
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="width:38px;height:38px;border-radius:50%;background:var(--brand-light);color:var(--brand-dark);font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center">${ini}</div>
+        <div><div style="font-size:15px;font-weight:700;color:var(--gray-900)">${esc(user.name)}</div><div style="font-size:11px;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.05em">${user.role}</div></div>
+      </div>
+      <!-- Two pie charts side by side -->
+      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">
+        <!-- Pie 1: This month -->
+        <div style="display:flex;flex-direction:column;align-items:center;gap:5px;flex:1;min-width:130px">
+          <div style="font-size:10px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.05em;text-align:center">${esc(monthLabel)}</div>
+          <canvas id="${pid}" width="${sz}" height="${sz}"></canvas>
+          <div style="font-size:10px;color:var(--gray-500);text-align:center">${st.b3} done / ${st.b4} assigned</div>
+        </div>
+        <!-- Pie 2: Overall all time -->
+        <div style="display:flex;flex-direction:column;align-items:center;gap:5px;flex:1;min-width:130px">
+          <div style="font-size:10px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.05em;text-align:center">Overall All Time</div>
+          <canvas id="${pidOverall}" width="${sz}" height="${sz}"></canvas>
+          <div style="font-size:10px;color:var(--gray-500);text-align:center">${st.b1-st.b2} done / ${st.b1} total</div>
+        </div>
+      </div>
+      <!-- Stats -->
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-radius:8px;background:var(--gray-50);border-left:3px solid var(--gray-300)">
+          <span style="font-size:12px;color:var(--gray-600)">Total Assigned (All Time)</span>
+          <span style="font-size:19px;font-weight:700;color:var(--gray-900);font-family:'DM Mono',monospace">${st.b1}</span>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-radius:8px;background:#fef3c7;border-left:3px solid var(--accent)">
+          <span style="font-size:12px;color:var(--accent-dark)">Still Pending</span>
+          <span style="font-size:19px;font-weight:700;color:var(--accent-dark);font-family:'DM Mono',monospace">${st.b2}</span>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-radius:8px;background:var(--brand-bg);border-left:3px solid var(--brand)">
+          <span style="font-size:12px;color:var(--brand-dark)">Done This Month</span>
+          <span style="font-size:19px;font-weight:700;color:var(--brand-dark);font-family:'DM Mono',monospace">${st.b3}</span>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-radius:8px;background:var(--gray-50);border-left:3px solid var(--gray-400)">
+          <span style="font-size:12px;color:var(--gray-600)">Assigned This Month</span>
+          <span style="font-size:19px;font-weight:700;color:var(--gray-700);font-family:'DM Mono',monospace">${st.b4}</span>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  if(r==='manager'){
+    const targets=users.filter(u=>u.role!=='manager');
+    const ts=Date.now();
+    const cards=targets.map((u,i)=>{
+      return {pid:`pie-${i}-${ts}`,pidO:`pieO-${i}-${ts}`,u,st:getMemberStats(u.id,u.role==='admin')};
+    });
+    document.getElementById('perf-container').innerHTML=
+      `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px">${cards.map(c=>memberCard(c.u,c.st,c.pid,c.pidO)).join('')}</div>`;
+    setTimeout(()=>cards.forEach(c=>{
+      drawPie(c.pid,c.st.pieDone,c.st.pieTotal);
+      drawPie(c.pidO,c.st.b1-c.st.b2,c.st.b1); // overall: done vs total
+    }),60);
+  } else if(r==='admin'){
+    // Admin sees: all runners individually + their own card
+    // Does NOT see other admins' cards
+    const runners=users.filter(u=>u.role==='runner');
+    const ts=Date.now();
+    const targets=[
+      ...runners.map(u=>({u,isAdmin:false})),
+      {u:CU,isAdmin:true} // own card last
+    ];
+    const cards=targets.map((item,i)=>({
+      pid:`pie-${i}-${ts}`,pidO:`pieO-${i}-${ts}`,
+      u:item.u,
+      st:getMemberStats(item.u.id,item.isAdmin)
+    }));
+    document.getElementById('perf-container').innerHTML=
+      `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px">${cards.map(c=>memberCard(c.u,c.st,c.pid,c.pidO)).join('')}</div>`;
+    setTimeout(()=>cards.forEach(c=>{
+      drawPie(c.pid,c.st.pieDone,c.st.pieTotal);
+      drawPie(c.pidO,c.st.b1-c.st.b2,c.st.b1);
+    }),60);
+  } else {
+    // Runner sees only own card
+    const st=getMemberStats(CU.id,false);
+    const pid=`pie-self-${Date.now()}`;
+    const pidO=`pie-self-o-${Date.now()}`;
+    document.getElementById('perf-container').innerHTML=memberCard(CU,st,pid,pidO);
+    setTimeout(()=>{drawPie(pid,st.pieDone,st.pieTotal);drawPie(pidO,st.b1-st.b2,st.b1);},60);
+  }
+}
+
+// ═══════════════════ STATISTICS ═══════════════════
+function renderStats(){
+  const tasks=DB.get('tasks')||[];
+  const props=DB.get('props')||[];
+  const users=DB.get('users')||[];
+  const cityFilter=document.getElementById('stat-city-filter');
+  const cityVal=cityFilter?cityFilter.value:'';
+
+  // Build city→propIds map
+  const klIds=new Set(props.filter(p=>p.city==='KL'||!p.city).map(p=>p.id));
+  const jbIds=new Set(props.filter(p=>p.city==='JB').map(p=>p.id));
+  function matchCity(t){
+    if(t.category==='Note') return cityVal===''?true:false;
+    if(cityVal==='KL') return klIds.has(t.condoId);
+    if(cityVal==='JB') return jbIds.has(t.condoId);
+    return true;
+  }
+
+  // Filter to non-mirror tasks only
+  const base=tasks.filter(t=>!t.mirrorOf&&matchCity(t));
+  const total=base.length;
+  const done=base.filter(t=>t.status==='Done').length;
+  const inprog=base.filter(t=>t.status==='In Progress').length;
+  const todo=base.filter(t=>t.status==='To Do').length;
+  const overallPct=total>0?Math.round((done/total)*100):0;
+
+  // Category breakdown
+  const cats=['Plumbing','Leaking','Electrical','Cleaning','Air-Con','Refurbish','Door Knob','Painting','Pest Control','Note','Others'];
+  const catData=cats.map(c=>({cat:c,count:base.filter(t=>t.category===c).length,done:base.filter(t=>t.category===c&&t.status==='Done').length})).filter(c=>c.count>0).sort((a,b)=>b.count-a.count);
+
+  // City breakdown (only for ALL filter)
+  const klTasks=tasks.filter(t=>!t.mirrorOf&&klIds.has(t.condoId));
+  const jbTasks=tasks.filter(t=>!t.mirrorOf&&jbIds.has(t.condoId));
+
+  // Member performance
+  const members=users.filter(u=>u.role!=='manager');
+  const memberData=members.map(u=>({
+    user:u,
+    total:base.filter(t=>t.assigneeId===u.id).length,
+    done:base.filter(t=>t.assigneeId===u.id&&t.status==='Done').length,
+  })).sort((a,b)=>b.total-a.total);
+
+  // Priority breakdown
+  const priData=[
+    {label:'Urgent',color:'#dc2626',count:base.filter(t=>t.priority==='Urgent').length},
+    {label:'Normal',color:'#f59e0b',count:base.filter(t=>t.priority==='Normal').length},
+    {label:'Low',   color:'#0891b2',count:base.filter(t=>t.priority==='Low').length},
+  ];
+
+  // Property hotspots
+  const propData=props.map(p=>({
+    name:p.name,city:p.city||'KL',
+    total:base.filter(t=>t.condoId===p.id).length,
+    open:base.filter(t=>t.condoId===p.id&&t.status!=='Done').length,
+  })).filter(p=>p.total>0).sort((a,b)=>b.total-a.total).slice(0,10);
+
+  function statBox(num,label,color){
+    return `<div style="background:var(--white);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow);border-top:3px solid ${color};animation:cardIn 0.3s ease both">
+      <div style="font-size:28px;font-weight:700;color:${color};font-family:'DM Mono',monospace">${num}</div>
+      <div style="font-size:12px;color:var(--gray-600);margin-top:3px;font-weight:500">${label}</div>
+    </div>`;
+  }
+
+  function sectionTitle(t){return `<div style="font-size:13px;font-weight:700;color:var(--gray-700);text-transform:uppercase;letter-spacing:0.06em;margin:24px 0 12px">${t}</div>`;}
+
+  function barRow(label,val,max,color,sub){
+    const pct=max>0?Math.round((val/max)*100):0;
+    return `<div style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+        <span style="font-size:13px;color:var(--gray-700);font-weight:500">${label}${sub?` <span style="font-size:10px;color:var(--gray-400)">${sub}</span>`:''}</span>
+        <span style="font-size:13px;font-weight:700;color:${color};font-family:'DM Mono',monospace">${val}</span>
+      </div>
+      <div style="height:8px;background:var(--gray-100);border-radius:4px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:${color};border-radius:4px;transition:width 0.6s ease"></div>
+      </div>
+    </div>`;
+  }
+
+  function pieCanvasCard(pid,done,total,title,sub){
+    const pct=total>0?Math.round((done/total)*100):0;
+    return `<div style="background:var(--white);border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:20px;display:flex;align-items:center;gap:20px;animation:cardIn 0.3s ease both">
+      <div style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:6px">
+        <canvas id="${pid}" width="110" height="110"></canvas>
+        <div style="font-size:10px;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.05em">${pct}% done</div>
+      </div>
+      <div>
+        <div style="font-size:15px;font-weight:700;color:var(--gray-900)">${title}</div>
+        <div style="font-size:12px;color:var(--gray-500);margin-top:2px">${sub}</div>
+        <div style="margin-top:10px;display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;align-items:center;gap:6px;font-size:12px"><div style="width:8px;height:8px;border-radius:2px;background:#0891b2"></div>Done: <strong>${done}</strong></div>
+          <div style="display:flex;align-items:center;gap:6px;font-size:12px"><div style="width:8px;height:8px;border-radius:2px;background:#e2e8f0"></div>Pending: <strong>${total-done}</strong></div>
+          <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--gray-500)">Total: <strong>${total}</strong></div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  const pies=[];
+  const ts=Date.now();
+
+  // Overall completion pie
+  const pid0=`sp0-${ts}`;
+  pies.push({id:pid0,done,total});
+
+  // City pies (only when showing All)
+  let citySection='';
+  if(!cityVal){
+    const pidKL=`spKL-${ts}`,pidJB=`spJB-${ts}`;
+    const klDone=klTasks.filter(t=>t.status==='Done').length;
+    const jbDone=jbTasks.filter(t=>t.status==='Done').length;
+    pies.push({id:pidKL,done:klDone,total:klTasks.length});
+    pies.push({id:pidJB,done:jbDone,total:jbTasks.length});
+    citySection=sectionTitle('By City')+
+      `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">
+        ${pieCanvasCard(pidKL,klDone,klTasks.length,'Kuala Lumpur (KL)',klTasks.length+' total tasks')}
+        ${pieCanvasCard(pidJB,jbDone,jbTasks.length,'Johor Bahru (JB)',jbTasks.length+' total tasks')}
+      </div>`;
+  }
+
+  // Category bars
+  const maxCat=catData.length>0?catData[0].count:1;
+  const catBars=catData.map(c=>{
+    const cfg=CAT_CFG[c.cat]||{icon:'📋'};
+    return barRow(cfg.icon+' '+c.cat,c.count,maxCat,'var(--brand)',c.done+' done');
+  }).join('');
+
+  // Priority donut pies
+  const priPies=priData.filter(p=>p.count>0).map((p,i)=>{
+    const pid=`spri${i}-${ts}`;
+    pies.push({id:pid,done:base.filter(t=>t.priority===p.label&&t.status==='Done').length,total:p.count,color:p.color});
+    return `<div style="background:var(--white);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px;display:flex;flex-direction:column;align-items:center;gap:8px;animation:cardIn 0.3s ease both">
+      <canvas id="${pid}" width="90" height="90"></canvas>
+      <div style="font-size:13px;font-weight:600;color:var(--gray-800)">${p.label}</div>
+      <div style="font-size:12px;color:var(--gray-500)">${p.count} tasks</div>
+    </div>`;
+  }).join('');
+
+  // Member bars
+  const maxMem=memberData.length>0?memberData[0].total:1;
+  const memBars=memberData.map(m=>{
+    const roleLabel=m.user.role.charAt(0).toUpperCase()+m.user.role.slice(1);
+    return barRow(roleLabel+' '+m.user.name,m.total,maxMem,'var(--accent)',m.done+' done');
+  }).join('');
+
+  // Property hotspot bars
+  const maxProp=propData.length>0?propData[0].total:1;
+  const propBars=propData.map(p=>barRow(p.name,p.total,maxProp,'var(--green-dark)',p.open+' open · '+p.city)).join('');
+
+  // Build HTML
+  const html=`
+    ${sectionTitle('Overview')}
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:4px">
+      ${statBox(total,'Total Tasks','var(--brand)')}
+      ${statBox(done,'Completed','var(--green)')}
+      ${statBox(inprog,'In Progress','var(--accent)')}
+      ${statBox(todo,'To Do','var(--gray-500)')}
+      ${statBox(overallPct+'%','Overall Done','#7c3aed')}
+    </div>
+    ${sectionTitle('Overall Completion')}
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">
+      ${pieCanvasCard(pid0,done,total,'All Tasks',cityVal?cityVal+' properties':'All properties')}
+    </div>
+    ${citySection}
+    ${sectionTitle('By Category')}
+    <div style="background:var(--white);border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:20px">
+      ${catBars||'<div style="color:var(--gray-400);font-size:13px">No data</div>'}
+    </div>
+    ${sectionTitle('By Priority')}
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;max-width:400px">
+      ${priPies}
+    </div>
+    ${sectionTitle('By Team Member')}
+    <div style="background:var(--white);border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:20px">
+      ${memBars||'<div style="color:var(--gray-400);font-size:13px">No data</div>'}
+    </div>
+    ${propData.length?sectionTitle('Property Hotspots')+'<div style="background:var(--white);border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:20px">'+propBars+'</div>':''}
+  `;
+
+  document.getElementById('stat-container').innerHTML=html;
+
+  // Draw all pies with animation
+  setTimeout(()=>{
+    pies.forEach(p=>{
+      drawPie(p.id, p.done, p.total);
+    });
+  },80);
+}
+
+// ═══════════════════ CALENDAR ═══════════════════
+// Calendar popup state — tasks stored by date key to avoid JSON-in-onclick escaping issues
+let _calPopupTasks=[];
+const _calDayTasksMap={};
+function openCalPopup(dateStr){
+  _calPopupTasks=_calDayTasksMap[dateStr]||[];
+  const users=DB.get('users')||[];
+  document.getElementById('cal-popup-title').textContent='Tasks on '+fmtDate(dateStr+'T00:00:00');
+  document.getElementById('cal-popup-body').innerHTML=_calPopupTasks.map(t=>{
+    const pri=t.priority||'Normal';
+    const priColor=pri==='Urgent'?'#dc2626':pri==='Normal'?'#b45309':'#0e7490';
+    const loc=t.category==='Note'?'Note':((t.condo||'')+(t.unit?' · '+t.unit:'')+(t.area?' · '+t.area:''));
+    // Find runner + admin for this task
+    const whoIds=new Set();
+    if(t.assigneeId) whoIds.add(t.assigneeId);
+    // find mirror
+    const allTasks=DB.get('tasks')||[];
+    const mirror=t.mirrorOf?allTasks.find(x=>x.id===t.mirrorOf):allTasks.find(x=>x.mirrorOf===t.id);
+    if(mirror&&mirror.assigneeId) whoIds.add(mirror.assigneeId);
+    const whoChips=[...whoIds].map(uid=>{const u=users.find(x=>x.id===uid);if(!u)return'';const roleLabel=u.role.charAt(0).toUpperCase()+u.role.slice(1);return `<span class="cal-popup-who-chip">${roleLabel} ${esc(u.name)}</span>`;}).join('');
+    return `<div class="cal-popup-item" onclick="closeCalPopup();openDetail('${t.id}')">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+        <div style="width:6px;height:6px;border-radius:50%;background:${priColor};flex-shrink:0"></div>
+        <div class="cal-popup-task-title">${esc(t.title||t.desc||'Task')}</div>
+      </div>
+      ${loc?`<div class="cal-popup-task-loc">📍 ${esc(loc)}</div>`:''}
+      ${t.schedNote?`<div style="font-size:11px;color:#94a3b8">🕐 ${esc(t.schedNote)}</div>`:''}
+      <div class="cal-popup-task-who">${whoChips}</div>
+    </div>`;
+  }).join('');
+  document.getElementById('cal-popup-bg').classList.add('open');
+}
+function closeCalPopup(){document.getElementById('cal-popup-bg').classList.remove('open');}
+
+function renderCalendar(){
+  const label=MONTHS[calMonth]+' '+calYear;
+  document.getElementById('cal-month-label').textContent=label;
+  const allTasks=DB.get('tasks')||[];
+  const todos=DB.get('todos')||{};
+  const users=DB.get('users')||[];
+
+  // Build deduplicated task list for calendar
+  // Show only original runner tasks (not mirrors) — the popup will show both assignees
+  let calTasks=[];
+  if(CU.role==='admin'||CU.role==='manager'){
+    // All runner tasks scheduled (original, no mirrors)
+    const runnerSched=allTasks.filter(t=>t.assigneeRole==='runner'&&!t.mirrorOf&&t.scheduled);
+    // Admin's own assigned tasks scheduled (non-mirror)
+    const myOwn=allTasks.filter(t=>t.assigneeId===CU.id&&t.scheduled&&!t.mirrorOf);
+    const seen=new Set();
+    [...runnerSched,...myOwn].forEach(t=>{if(!seen.has(t.id)){seen.add(t.id);calTasks.push(t);}});
+  } else {
+    calTasks=allTasks.filter(t=>t.assigneeId===CU.id&&t.scheduled&&!t.mirrorOf);
+  }
+
+  const firstDay=new Date(calYear,calMonth,1).getDay();
+  const daysInMonth=new Date(calYear,calMonth+1,0).getDate();
+  const daysInPrev=new Date(calYear,calMonth,0).getDate();
+  const today=new Date();
+  const dayHeaders=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  let html=dayHeaders.map(d=>`<div class="cal-day-header">${d}</div>`).join('');
+  for(let i=0;i<firstDay;i++) html+=`<div class="cal-day other-month"><div class="cal-date">${daysInPrev-firstDay+1+i}</div></div>`;
+
+  for(let d=1;d<=daysInMonth;d++){
+    const ds=`${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const isToday=today.getFullYear()===calYear&&today.getMonth()===calMonth&&today.getDate()===d;
+    const dayTasks=calTasks.filter(t=>t.scheduled===ds);
+
+    if(dayTasks.length===0){
+      html+=`<div class="cal-day${isToday?' today':''}"><div class="cal-date">${d}</div></div>`;
+      continue;
+    }
+
+    // Build name pills — each task shows runner name + admin name if mirror exists
+    const pills=dayTasks.map(t=>{
+      const runner=users.find(u=>u.id===t.assigneeId);
+      const mirror=allTasks.find(m=>m.mirrorOf===t.id);
+      const admin=mirror?users.find(u=>u.id===mirror.assigneeId):null;
+      const pri=t.priority||'Normal';
+      const bg=pri==='Urgent'?'#fee2e2':pri==='Normal'?'#fef3c7':'#cffafe';
+      const col=pri==='Urgent'?'#991b1b':pri==='Normal'?'#92400e':'#0e7490';
+      // Build full-name labels: "Runner Ali", "Admin Sarah"
+      function roleName(u){if(!u)return'';return u.role.charAt(0).toUpperCase()+u.role.slice(1)+' '+u.name;}
+      const parts=[roleName(runner),admin&&admin.id!==t.assigneeId?roleName(admin):null].filter(Boolean);
+      const nameStr=parts.join(' & ');
+      return `<div class="cal-name-pill" style="background:${bg};color:${col}" onclick="event.stopPropagation();openDetail('${t.id}')" title="${esc(t.title||t.desc||'')}">👤 ${esc(nameStr)}</div>`;
+    });
+
+    // If more than 4, show first 3 + "see all" button
+    let pillsHtml='';
+    // Always store in map so popup can be triggered for any day
+    _calDayTasksMap[ds]=dayTasks.map(t=>({id:t.id,title:t.title,desc:t.desc,category:t.category,condo:t.condo,unit:t.unit,area:t.area,priority:t.priority,schedNote:t.schedNote,assigneeId:t.assigneeId,mirrorOf:t.mirrorOf}));
+    if(dayTasks.length<=4){
+      pillsHtml=pills.join('');
+    } else {
+      pillsHtml=pills.slice(0,3).join('');
+      // Store full task objects in map keyed by date — avoids JSON-in-HTML escaping bugs
+      _calDayTasksMap[ds]=dayTasks.map(t=>({id:t.id,title:t.title,desc:t.desc,category:t.category,condo:t.condo,unit:t.unit,area:t.area,priority:t.priority,schedNote:t.schedNote,assigneeId:t.assigneeId,mirrorOf:t.mirrorOf}));
+      pillsHtml+=`<div class="cal-more" style="cursor:pointer;color:var(--brand);font-weight:600;padding:2px 4px;border-radius:4px" onclick="event.stopPropagation();openCalPopup('${ds}')">+${dayTasks.length-3} more — tap to view all</div>`;
+    }
+
+    html+=`<div class="cal-day${isToday?' today':''} has-tasks"><div class="cal-date">${d}</div>${pillsHtml}</div>`;
+  }
+
+  const total=firstDay+daysInMonth;const rem=total%7===0?0:7-total%7;
+  for(let i=1;i<=rem;i++) html+=`<div class="cal-day other-month"><div class="cal-date">${i}</div></div>`;
+  document.getElementById('cal-grid').innerHTML=html;
+}
+function calNav(dir){calMonth+=dir;if(calMonth<0){calMonth=11;calYear--;}if(calMonth>11){calMonth=0;calYear++;}renderCalendar();}
+
+// ═══════════════════ USERS ═══════════════════
+const avColors=[{bg:'#cffafe',c:'#0e7490'},{bg:'#fef3c7',c:'#b45309'},{bg:'#dbeafe',c:'#1e40af'},{bg:'#fce7f3',c:'#9d174d'},{bg:'#dcfce7',c:'#166534'},{bg:'#fee2e2',c:'#991b1b'}];
+function renderUsers(){
+  const users=DB.get('users')||[];
+  const isManager=CU.role==='manager';
+  document.getElementById('users-grid').innerHTML=users.map((u,i)=>{
+    const col=avColors[i%avColors.length];const ini=u.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+    const editBtn=isManager&&u.role!=='manager'?`<button class="btn btn-sm" onclick="openEditUser('${u.id}')">Edit</button>`:'';
+    const delBtn=isManager&&u.id!==CU.id&&u.role!=='manager'?`<button class="btn btn-sm btn-danger" onclick="deleteUser('${u.id}')">Remove</button>`:'';
+    return `<div class="user-card">
+      <div class="user-avatar" style="background:${col.bg};color:${col.c}">${ini}</div>
+      <div class="user-info"><div class="user-name">${esc(u.name)}${u.id===CU.id?' (you)':''}</div><div class="user-email">${esc(u.email)}</div>${u.wa?`<div style="font-size:11px;color:var(--gray-400);margin-top:2px">WA: ${esc(u.wa)}</div>`:''}<span class="user-role ${u.role}">${u.role}</span></div>
+      <div style="display:flex;flex-direction:column;gap:5px">${editBtn}${delBtn}</div>
+    </div>`;
+  }).join('');
+}
+let editUserId=null;
+function openUserModal(){
+  editUserId=null;
+  ['u-name','u-email','u-pass','u-wa'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('user-modal-title').textContent='Add Team Member';
+  document.getElementById('u-save-btn').textContent='Add Member';
+  document.getElementById('u-pass-hint').style.display='none';
+  document.getElementById('u-pass').placeholder='Set a password';
+  openModal('modal-user');
+}
+function openEditUser(id){
+  editUserId=id;
+  const users=DB.get('users')||[];const u=users.find(x=>x.id===id);if(!u)return;
+  document.getElementById('user-modal-title').textContent='Edit Member';
+  document.getElementById('u-save-btn').textContent='Save Changes';
+  document.getElementById('u-name').value=u.name;
+  document.getElementById('u-email').value=u.email;
+  document.getElementById('u-role').value=u.role;
+  document.getElementById('u-pass').value='';
+  document.getElementById('u-pass').placeholder='Leave blank to keep current';
+  document.getElementById('u-pass-hint').style.display='block';
+  document.getElementById('u-wa').value=u.wa||'';
+  openModal('modal-user');
+}
+function saveUser(){
+  const name=document.getElementById('u-name').value.trim();
+  const email=document.getElementById('u-email').value.trim().toLowerCase();
+  const pass=document.getElementById('u-pass').value;
+  const role=document.getElementById('u-role').value;
+  const wa=document.getElementById('u-wa').value.trim();
+  if(!name||!email){showToast('Name and email required');return;}
+  const users=DB.get('users')||[];
+  if(editUserId){
+    const idx=users.findIndex(u=>u.id===editUserId);
+    if(idx>-1){
+      const emailConflict=users.find(u=>u.email.toLowerCase()===email&&u.id!==editUserId);
+      if(emailConflict){showToast('Email already in use');return;}
+      users[idx]={...users[idx],name,email,role,wa};
+      if(pass) users[idx].password=pass; // only update password if provided
+    }
+    DB.set('users',users);closeModal('modal-user');renderUsers();populateAssignDropdown();populateRunnerFilter();showToast('Member updated!');
+  } else {
+    if(!pass){showToast('Password required');return;}
+    if(users.find(u=>u.email.toLowerCase()===email)){showToast('Email exists');return;}
+    users.push({id:nextId(),name,email,password:pass,role,wa});
+    DB.set('users',users);closeModal('modal-user');renderUsers();populateAssignDropdown();populateRunnerFilter();showToast('Added!');
+  }
+}
+function deleteUser(id){if(!confirm('Remove this member?'))return;DB.set('users',(DB.get('users')||[]).filter(u=>u.id!==id));renderUsers();populateAssignDropdown();populateRunnerFilter();showToast('Removed');}
+
+// ═══════════════════ PROPERTIES ═══════════════════
+function renderProps(){
+  const props=DB.get('props')||[];const tasks=DB.get('tasks')||[];
+  const el=document.getElementById('props-grid');
+  const statsEl=document.getElementById('props-stats');
+
+  // ── Compute unit totals ──
+  const klProps=props.filter(p=>p.city==='KL'||!p.city);
+  const jbProps=props.filter(p=>p.city==='JB');
+  const klUnits=klProps.reduce((s,p)=>s+(p.units||[]).length,0);
+  const jbUnits=jbProps.reduce((s,p)=>s+(p.units||[]).length,0);
+  const totalUnits=klUnits+jbUnits;
+  const totalProps=props.length;
+  const klCnt=klProps.length;
+  const jbCnt=jbProps.length;
+
+  function statCard(num,label,sub,color){
+    return `<div style="background:var(--white);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow);border-top:3px solid ${color};animation:cardIn 0.3s cubic-bezier(0.22,1,0.36,1) both">
+      <div style="font-size:30px;font-weight:700;color:${color};font-family:'DM Mono',monospace;line-height:1">${num}</div>
+      <div style="font-size:13px;font-weight:600;color:var(--gray-800);margin-top:4px">${label}</div>
+      ${sub?`<div style="font-size:11px;color:var(--gray-400);margin-top:2px">${sub}</div>`:''}
+    </div>`;
+  }
+
+  if(statsEl){
+    statsEl.innerHTML=
+      statCard(totalUnits,'Total Units','All properties combined','var(--brand)')+
+      statCard(klUnits,`KL Units`,`${klCnt} propert${klCnt===1?'y':'ies'}`,'var(--brand-dark)')+
+      statCard(jbUnits,`JB Units`,`${jbCnt} propert${jbCnt===1?'y':'ies'}`,'var(--accent-dark)')+
+      statCard(totalProps,'Total Properties',`KL: ${klCnt} · JB: ${jbCnt}`,'var(--gray-500)');
+    // stagger animation
+    statsEl.querySelectorAll('div[style*="border-top"]').forEach((c,i)=>c.style.animationDelay=i*60+'ms');
+  }
+
+  if(!props.length){el.innerHTML='<div style="color:var(--gray-400);font-size:13px;padding:12px">No properties yet.</div>';return;}
+  function propCard(p){
+    const cnt=tasks.filter(t=>t.condoId===p.id&&!t.mirrorOf).length;
+    const open=tasks.filter(t=>t.condoId===p.id&&t.status!=='Done'&&!t.mirrorOf).length;
+    const units=p.units||[];
+    return `<div class="prop-card">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px">
+        <div class="prop-condo-name" style="margin-bottom:0">${esc(p.name)}</div>
+        <button class="btn btn-sm" onclick="openEditProp('${p.id}')" style="flex-shrink:0;margin-left:8px">Edit</button>
+      </div>
+      <div class="prop-units-label">Units</div>
+      <div class="prop-units">${units.slice(0,8).map(u=>`<span class="unit-chip">${esc(u)}</span>`).join('')}${units.length>8?`<span class="unit-chip">+${units.length-8}</span>`:''}</div>
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <span style="font-size:11px;background:var(--gray-100);padding:3px 8px;border-radius:20px;color:var(--gray-600)">${cnt} tasks</span>
+        <span style="font-size:11px;background:${open>0?'var(--accent-light)':'var(--brand-light)'};padding:3px 8px;border-radius:20px;color:${open>0?'var(--accent-dark)':'var(--brand-dark)'}">${open} open</span>
+      </div>
+      <button class="btn btn-sm btn-danger" onclick="deleteProp('${p.id}')">Remove</button>
+    </div>`;
+  }
+  let html='';
+  if(klProps.length){
+    html+=`<div style="grid-column:1/-1;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--brand);margin-bottom:4px;margin-top:8px">Kuala Lumpur (KL)</div>`;
+    html+=klProps.map(propCard).join('');
+  }
+  if(jbProps.length){
+    html+=`<div style="grid-column:1/-1;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--accent-dark);margin-bottom:4px;margin-top:16px">Johor Bahru (JB)</div>`;
+    html+=jbProps.map(propCard).join('');
+  }
+  el.innerHTML=html;
+}
+let editPropId=null;
+function openPropModal(){
+  editPropId=null;
+  document.getElementById('prop-modal-title').textContent='Add Property';
+  document.getElementById('p-name').value='';
+  document.getElementById('p-city').value='KL';
+  document.getElementById('p-units').value='';
+  openModal('modal-prop');
+}
+function openEditProp(id){
+  editPropId=id;
+  const props=DB.get('props')||[];const p=props.find(x=>x.id===id);if(!p)return;
+  document.getElementById('prop-modal-title').textContent='Edit Property';
+  document.getElementById('p-name').value=p.name;
+  document.getElementById('p-city').value=p.city||'KL';
+  document.getElementById('p-units').value=(p.units||[]).join('\n');
+  openModal('modal-prop');
+}
+function saveProp(){
+  const name=document.getElementById('p-name').value.trim();if(!name){showToast('Condo name required');return;}
+  const city=document.getElementById('p-city').value;
+  const units=document.getElementById('p-units').value.split('\n').map(u=>u.trim()).filter(Boolean);
+  const props=DB.get('props')||[];
+  if(editPropId){
+    const idx=props.findIndex(p=>p.id===editPropId);
+    if(idx>-1){
+      const oldName=props[idx].name;
+      props[idx]={...props[idx],name,city,units};
+      // If property name changed, update ALL tasks that reference this property
+      // Must update tasks in cache AND Supabase before updating props
+      if(oldName!==name){
+        const tasks=DB.get('tasks')||[];
+        tasks.forEach(t=>{
+          if(t.condoId===editPropId) t.condo=name; // update in-memory cache
+        });
+        DB.set('tasks',tasks); // write updated tasks to Supabase
+      }
+    }
+    DB.set('props',props);
+    closeModal('modal-prop');
+    renderProps();
+    renderTasks(); // refresh task cards to show new property name immediately
+    populateCondoDropdown();
+    showToast('Property updated! Task cards refreshed.');
+  } else {
+    props.push({id:nextId(),name,city,units});
+    DB.set('props',props);closeModal('modal-prop');renderProps();populateCondoDropdown();showToast('Property added!');
+  }
+}
+function deleteProp(id){if(!confirm('Remove?'))return;DB.set('props',(DB.get('props')||[]).filter(p=>p.id!==id));renderProps();populateCondoDropdown();showToast('Removed');}
+
+// ═══════════════════ DROPDOWNS ═══════════════════
+function populateAssignDropdown(targetRole){
+  const users=DB.get('users')||[];
+  let list;
+  if(targetRole==='runner') list=users.filter(u=>u.role==='runner');
+  else if(targetRole==='admin') list=users.filter(u=>u.role==='admin');
+  else list=users.filter(u=>u.role!=='manager'); // 'all' — runners + admins
+  document.getElementById('f-assign').innerHTML=list.map(u=>`<option value="${u.id}">${u.name} (${u.role})</option>`).join('');
+}
+function populateRunnerFilter(){
+  const users=DB.get('users')||[];const el=document.getElementById('filter-assignee');if(!el)return;
+  const r=CU.role;
+  const list=r==='manager'?(taskSubview==='admin'?users.filter(u=>u.role==='admin'):users.filter(u=>u.role==='runner')):users.filter(u=>u.role==='runner');
+  el.innerHTML='<option value="">All</option>'+list.map(u=>`<option value="${u.id}">${u.name}</option>`).join('');
+}
+function populateCondoDropdown(){
+  const props=DB.get('props')||[];
+  document.getElementById('f-condo').innerHTML=props.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  populateUnitDropdown();
+}
+function populateUnitDropdown(){
+  const props=DB.get('props')||[];const condoId=document.getElementById('f-condo').value;
+  const prop=props.find(p=>p.id===condoId);const units=prop&&prop.units?prop.units:[];
+  document.getElementById('f-unit').innerHTML=units.map(u=>`<option value="${u}">${u}</option>`).join('');
+}
+
+document.querySelectorAll('.modal-bg').forEach(bg=>bg.addEventListener('click',e=>{if(e.target===bg)bg.classList.remove('open');}));
+// Boot: always reload fresh data from Supabase, then restore per-device session
+(async function(){
+  showLoader();
+  try{
+    await _supaGetAll(); // load latest data from Supabase into cache
+  }catch(e){
+    console.warn('Initial load failed',e);
+  }
+  initDB(); // seed defaults only if no data exists yet
+  hideLoader();
+  tryAutoLogin(); // session is per-device localStorage — unaffected by other users
+})();
+</script>
+</body>
+</html>
