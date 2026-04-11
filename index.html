@@ -339,6 +339,28 @@ textarea.mfi{resize:vertical;min-height:72px;font-size:14px}
 #toast.show{opacity:1;transform:translateY(0)}
 
 @media(max-width:600px){.mfrow{grid-template-columns:1fr}.detail-grid{grid-template-columns:1fr}.toolbar{gap:6px}.search-input{width:100%}.topbar-user{display:none}.status-tabs{flex-wrap:nowrap;overflow-x:auto}}
+
+/* ── Custom Date Picker ── */
+.custom-date-wrap{position:relative;display:inline-block;width:100%}
+.custom-date-btn{width:100%;padding:9px 12px;border:1.5px solid var(--gray-200);border-radius:var(--radius);background:var(--white);font-size:13px;color:var(--gray-700);text-align:left;cursor:pointer;font-family:inherit;transition:border-color 0.2s}
+.custom-date-btn:hover{border-color:var(--brand)}
+.custom-date-btn.has-date{color:var(--gray-900);font-weight:500}
+.dp-popup{position:fixed;z-index:9999;background:var(--white);border-radius:var(--radius-lg);box-shadow:0 8px 32px rgba(0,0,0,0.18);padding:16px;width:280px;display:none;animation:modalIn 0.18s cubic-bezier(0.34,1.56,0.64,1) both}
+.dp-popup.open{display:block}
+.dp-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.dp-nav{width:28px;height:28px;border-radius:50%;border:none;background:var(--gray-100);color:var(--gray-700);font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.15s}
+.dp-nav:hover{background:var(--brand-light);color:var(--brand-dark)}
+.dp-month-label{font-size:14px;font-weight:700;color:var(--gray-900)}
+.dp-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.dp-dh{font-size:10px;font-weight:700;color:var(--gray-400);text-align:center;padding:4px 0;text-transform:uppercase}
+.dp-day{font-size:12px;text-align:center;padding:6px 2px;border-radius:6px;cursor:pointer;color:var(--gray-700);transition:background 0.12s,color 0.12s;border:none;background:none;font-family:inherit;width:100%}
+.dp-day:hover{background:var(--brand-light);color:var(--brand-dark)}
+.dp-day.today{font-weight:700;color:var(--brand)}
+.dp-day.selected{background:var(--brand);color:white;font-weight:700}
+.dp-day.other-month{color:var(--gray-300)}
+.dp-day.other-month:hover{background:var(--gray-50);color:var(--gray-400)}
+.dp-today-btn{width:100%;margin-top:10px;padding:7px;border-radius:var(--radius);border:1.5px solid var(--brand);background:none;color:var(--brand);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.15s}
+.dp-today-btn:hover{background:var(--brand);color:white}
 </style>
 </head>
 <body>
@@ -398,7 +420,10 @@ textarea.mfi{resize:vertical;min-height:72px;font-size:14px}
   <div class="page" id="page-done">
     <div class="section-heading">
       <div><div class="section-title">Daily Report</div><div class="section-sub">Tasks completed on selected date</div></div>
-      <input type="date" id="done-date-picker" class="filter-sel" onchange="renderDoneToday()">
+      <div class="custom-date-wrap" style="position:relative">
+        <input type="hidden" id="done-date-picker">
+        <button type="button" class="custom-date-btn filter-sel" onclick="openDatePicker('done-date-picker',this,renderDoneToday)" id="done-date-picker-btn" style="min-width:140px">Today</button>
+      </div>
     </div>
     <div id="done-today-container"></div>
   </div>
@@ -484,7 +509,12 @@ textarea.mfi{resize:vertical;min-height:72px;font-size:14px}
         <div class="mfg"><label class="mfl">Status</label><select class="mfi" id="f-status"><option>To Do</option><option>In Progress</option><option>Done</option></select></div>
       </div>
       <div class="mfrow">
-        <div class="mfg"><label class="mfl">Schedule Date</label><input class="mfi" type="date" id="f-sched-date"></div>
+        <div class="mfg"><label class="mfl">Schedule Date</label>
+          <div class="custom-date-wrap">
+            <input class="mfi" id="f-sched-date" type="hidden">
+            <button type="button" class="custom-date-btn" onclick="openDatePicker('f-sched-date',this)" id="f-sched-date-btn">Select date</button>
+          </div>
+        </div>
         <div class="mfg"><label class="mfl">Schedule Note</label><input class="mfi" type="text" id="f-sched-note" placeholder="e.g. Morning 9am"></div>
       </div>
       <div class="mfg"><label class="mfl">Remark</label><input class="mfi" id="f-remark" placeholder="Any additional notes or remarks..."></div>
@@ -508,7 +538,12 @@ textarea.mfi{resize:vertical;min-height:72px;font-size:14px}
     <div class="modal-header"><span class="modal-title">Schedule Task</span><button class="modal-close" onclick="closeModal('modal-schedule')">×</button></div>
     <div class="modal-body">
       <p style="font-size:13px;color:var(--gray-600);margin-bottom:16px">Set a date for this task.</p>
-      <div class="mfg"><label class="mfl">Scheduled Date *</label><input class="mfi" type="date" id="sched-date"></div>
+      <div class="mfg"><label class="mfl">Scheduled Date *</label>
+        <div class="custom-date-wrap">
+          <input class="mfi" id="sched-date" type="hidden">
+          <button type="button" class="custom-date-btn" onclick="openDatePicker('sched-date',this)" id="sched-date-btn">Select date</button>
+        </div>
+      </div>
       <div class="mfg"><label class="mfl">Note (optional)</label><input class="mfi" type="text" id="sched-note" placeholder="e.g. Morning 9am–12pm"></div>
     </div>
     <div class="modal-footer"><button class="btn" onclick="closeModal('modal-schedule')">Cancel</button><button class="btn btn-primary" onclick="saveSchedule()">Confirm</button></div>
@@ -561,13 +596,23 @@ textarea.mfi{resize:vertical;min-height:72px;font-size:14px}
     <div id="cal-popup-body"></div>
   </div>
 </div>
+<!-- CUSTOM DATE PICKER POPUP -->
+<div id="dp-popup" class="dp-popup">
+  <div class="dp-header">
+    <button class="dp-nav" onclick="_dpNav(-1)">&#8249;</button>
+    <div class="dp-month-label" id="dp-month-label"></div>
+    <button class="dp-nav" onclick="_dpNav(1)">&#8250;</button>
+  </div>
+  <div class="dp-grid" id="dp-grid"></div>
+  <button class="dp-today-btn" onclick="_dpSelectToday()">Today</button>
+</div>
 <div id="toast"></div>
 
 <script>
 // ═══════════════════ DATA — SUPABASE ═══════════════════
 const SUPA_URL='https://zbxhrsablmmcebywfepm.supabase.co';
 const COMPANY_WA_GROUP=''; // ← paste your WhatsApp group invite link here
-const PROPFIX_URL='https://polyhomemy-coder.github.io/Propfix';
+const PROPFIX_URL='https://propfix.netlify.app';
 const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpieGhyc2FibG1tY2VieXdmZXBtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5MzkyODQsImV4cCI6MjA5MDUxNTI4NH0.GyL9zRyB0DA456ZjjGEb-SA4HVRaNxQIDxMARvGZRXA';
 const _cache={};
 
@@ -782,7 +827,7 @@ function showApp(){
   document.getElementById('topbar-user').textContent=CU.name;
   const rb=document.getElementById('role-badge');rb.textContent=CU.role.charAt(0).toUpperCase()+CU.role.slice(1);rb.className='role-badge '+CU.role;
   buildNav();populateCondoDropdown();populatePerfMonths();startAutoRefresh();
-  document.getElementById('done-date-picker').value=todayStr();
+  document.getElementById('done-date-picker').value=todayStr();_dpUpdateBtn('done-date-picker',todayStr());
   setupRole();showPage('page-tasks');
 }
 
@@ -837,12 +882,135 @@ function showPage(id){
 
 // ═══════════════════ UTILS ═══════════════════
 function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-function fmtDate(d){if(!d)return'—';try{return new Date(d).toLocaleDateString('en-MY',{day:'numeric',month:'short',year:'numeric'});}catch(e){return d;}}
+function fmtDate(d){if(!d)return'—';try{return new Date(d).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});}catch(e){return d;}}
 function todayStr(){return new Date().toISOString().split('T')[0];}
 function isSameDay(iso,ds){if(!iso||!ds)return false;return iso.split('T')[0]===ds;}
 function isSameMonth(iso,yr,mo){if(!iso)return false;const d=new Date(iso);return d.getFullYear()===yr&&d.getMonth()===mo;}
 function openModal(id){document.getElementById(id).classList.add('open');}
 function closeModal(id){document.getElementById(id).classList.remove('open');}
+// ══════════ CUSTOM DATE PICKER ══════════
+const MONTHS_FULL=['January','February','March','April','May','June','July','August','September','October','November','December'];
+// Day headers Sun-first
+const DP_DAYS=['Sun','Mon','Tue','Wed','Thurs','Fri','Sat'];
+
+let _dpTargetId=null;   // id of the hidden input we're setting
+let _dpCallback=null;   // optional callback after picking
+let _dpYear=0;
+let _dpMonth=0;
+let _dpSelectedDate=null; // 'YYYY-MM-DD'
+
+function openDatePicker(inputId, triggerEl, callback){
+  _dpTargetId=inputId;
+  _dpCallback=callback||null;
+  const input=document.getElementById(inputId);
+  const existing=input?input.value:'';
+  const now=new Date();
+  if(existing){
+    const d=new Date(existing+'T00:00:00');
+    _dpYear=d.getFullYear();_dpMonth=d.getMonth();_dpSelectedDate=existing;
+  } else {
+    _dpYear=now.getFullYear();_dpMonth=now.getMonth();_dpSelectedDate=null;
+  }
+  _dpRender();
+  const popup=document.getElementById('dp-popup');
+  popup.classList.add('open');
+  // Position below the trigger button
+  const rect=triggerEl.getBoundingClientRect();
+  let top=rect.bottom+6;
+  let left=rect.left;
+  // Clamp to viewport
+  if(left+280>window.innerWidth) left=window.innerWidth-290;
+  if(top+320>window.innerHeight) top=rect.top-326;
+  popup.style.top=top+'px';
+  popup.style.left=left+'px';
+}
+
+function closeDatePicker(){
+  document.getElementById('dp-popup').classList.remove('open');
+}
+
+function _dpNav(dir){
+  _dpMonth+=dir;
+  if(_dpMonth<0){_dpMonth=11;_dpYear--;}
+  if(_dpMonth>11){_dpMonth=0;_dpYear++;}
+  _dpRender();
+}
+
+function _dpRender(){
+  document.getElementById('dp-month-label').textContent=MONTHS_FULL[_dpMonth]+' '+_dpYear;
+  const firstDow=new Date(_dpYear,_dpMonth,1).getDay(); // 0=Sun
+  const daysInMonth=new Date(_dpYear,_dpMonth+1,0).getDate();
+  const daysInPrev=new Date(_dpYear,_dpMonth,0).getDate();
+  const today=new Date();
+  const todayStr=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+
+  let html=DP_DAYS.map(d=>`<div class="dp-dh">${d}</div>`).join('');
+  // Prev month fill
+  for(let i=0;i<firstDow;i++){
+    const day=daysInPrev-firstDow+1+i;
+    html+=`<button class="dp-day other-month" onclick="_dpPick(${_dpYear-(_dpMonth===0?1:0)},${(_dpMonth+11)%12},${day})">${day}</button>`;
+  }
+  // This month
+  for(let d=1;d<=daysInMonth;d++){
+    const ds=_dpYear+'-'+String(_dpMonth+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+    const cls=(ds===_dpSelectedDate?'selected':ds===todayStr?'today':'');
+    html+=`<button class="dp-day ${cls}" onclick="_dpPick(${_dpYear},${_dpMonth},${d})">${d}</button>`;
+  }
+  // Next month fill
+  const total=firstDow+daysInMonth;
+  const rem=total%7===0?0:7-total%7;
+  for(let i=1;i<=rem;i++){
+    const ny=_dpMonth===11?_dpYear+1:_dpYear;
+    const nm=(_dpMonth+1)%12;
+    html+=`<button class="dp-day other-month" onclick="_dpPick(${ny},${nm},${i})">${i}</button>`;
+  }
+  document.getElementById('dp-grid').innerHTML=html;
+}
+
+function _dpPick(y,m,d){
+  const ds=y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+  _dpSelectedDate=ds;
+  _dpYear=y;_dpMonth=m;
+  // Write value to hidden input
+  const input=document.getElementById(_dpTargetId);
+  if(input) input.value=ds;
+  // Update button label
+  const btn=document.getElementById(_dpTargetId+'-btn');
+  if(btn){
+    const label=new Date(ds+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
+    btn.textContent=label;
+    btn.classList.add('has-date');
+  }
+  closeDatePicker();
+  if(_dpCallback) _dpCallback();
+}
+
+function _dpSelectToday(){
+  const now=new Date();
+  _dpPick(now.getFullYear(),now.getMonth(),now.getDate());
+}
+
+// Helper: update button label from a stored date value
+function _dpUpdateBtn(inputId,dateStr){
+  const btn=document.getElementById(inputId+'-btn');
+  if(!btn)return;
+  if(dateStr){
+    const label=new Date(dateStr+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
+    btn.textContent=label;btn.classList.add('has-date');
+  } else {
+    btn.textContent=inputId==='done-date-picker'?'Select date':'Select date';
+    btn.classList.remove('has-date');
+  }
+}
+
+// Close picker when clicking outside
+document.addEventListener('click',function(e){
+  const popup=document.getElementById('dp-popup');
+  if(popup&&popup.classList.contains('open')&&!popup.contains(e.target)&&!e.target.classList.contains('custom-date-btn')){
+    closeDatePicker();
+  }
+});
+
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
 
 // ── Ripple effect on all clickable elements ──
@@ -1179,12 +1347,12 @@ function openTaskModal(id){
       document.getElementById('f-area').value=t.area||'';
       const fa=document.getElementById('f-assign');if(fa.options.length) fa.value=t.assigneeId;
       document.getElementById('f-status').value=t.status;
-      document.getElementById('f-sched-date').value=t.scheduled||'';
+      document.getElementById('f-sched-date').value=t.scheduled||'';_dpUpdateBtn('f-sched-date',t.scheduled||'');
       document.getElementById('f-sched-note').value=t.schedNote||'';
       document.getElementById('f-remark').value=t.remark||'';
     }
   } else {
-    ['f-title','f-desc','f-area','f-sched-date','f-sched-note','f-remark'].forEach(i=>document.getElementById(i).value='');
+    ['f-title','f-desc','f-area','f-sched-date','f-sched-note','f-remark'].forEach(i=>document.getElementById(i).value='');_dpUpdateBtn('f-sched-date','');
     document.getElementById('f-status').value='To Do';
     toggleLocationFields();populateUnitDropdown();
   }
@@ -1347,7 +1515,9 @@ function openDetail(id){
 function openScheduleModal(taskId){
   schedTaskId=taskId;
   const tasks=DB.get('tasks')||[];const t=tasks.find(x=>x.id===taskId);
-  document.getElementById('sched-date').value=t&&t.scheduled?t.scheduled:'';
+  const existing=t&&t.scheduled?t.scheduled:'';
+  document.getElementById('sched-date').value=existing;
+  _dpUpdateBtn('sched-date',existing);
   document.getElementById('sched-note').value=t&&t.schedNote?t.schedNote:'';
   openModal('modal-schedule');
 }
@@ -1913,7 +2083,7 @@ function renderCalendar(){
   const daysInMonth=new Date(calYear,calMonth+1,0).getDate();
   const daysInPrev=new Date(calYear,calMonth,0).getDate();
   const today=new Date();
-  const dayHeaders=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const dayHeaders=['Sun','Mon','Tue','Wed','Thurs','Fri','Sat'];
   let html=dayHeaders.map(d=>`<div class="cal-day-header">${d}</div>`).join('');
   for(let i=0;i<firstDay;i++) html+=`<div class="cal-day other-month"><div class="cal-date">${daysInPrev-firstDay+1+i}</div></div>`;
 
@@ -2071,7 +2241,10 @@ function renderProps(){
     const units=p.units||[];
     return `<div class="prop-card">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px">
-        <div class="prop-condo-name" style="margin-bottom:0">${esc(p.name)}</div>
+        <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0">
+          <div class="prop-condo-name" style="margin-bottom:0">${esc(p.name)}</div>
+          <span style="flex-shrink:0;background:var(--brand);color:white;font-size:12px;font-weight:700;padding:2px 9px;border-radius:20px;font-family:'DM Mono',monospace">${units.length} units</span>
+        </div>
         <button class="btn btn-sm" onclick="openEditProp('${p.id}')" style="flex-shrink:0;margin-left:8px">Edit</button>
       </div>
       <div class="prop-units-label">Units</div>
