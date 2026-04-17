@@ -1484,16 +1484,12 @@ function openDetail(id){
     locStr?'📍 '+locStr:'',
     '🏷️ '+(t.title||t.desc),
     t.desc&&t.title?'📋 '+t.desc:'',
-    t.remark?'📝 '+t.remark:'',
+    '',
     div,
-    '🔧 category : '+(t.category||''),
-    '⚡ priority : '+(t.priority||''),
     '👤 assign : '+aName,
     t.scheduled?'📅 schedule : '+fmtDate(t.scheduled):'',
     sep,
-    'Sent from PropFix',
-    taskLink, // raw URL — not encoded so WhatsApp makes it a clickable link
-  ].filter(Boolean).join('\n');
+  ].filter(s=>s!==undefined).join('\n');
 
   // Encode entire message once — WhatsApp decodes correctly, emojis show up fine
   const waMsg=encodeURIComponent(msgLines);
