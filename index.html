@@ -612,7 +612,7 @@ textarea.mfi{resize:vertical;min-height:72px;font-size:14px}
 // ═══════════════════ DATA — SUPABASE ═══════════════════
 const SUPA_URL='https://zbxhrsablmmcebywfepm.supabase.co';
 const COMPANY_WA_GROUP=''; // ← paste your WhatsApp group invite link here
-const PROPFIX_URL='https://propfix.netlify.app';
+const PROPFIX_URL='https://polyhomemy-coder.github.io/Propfix';
 const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpieGhyc2FibG1tY2VieXdmZXBtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5MzkyODQsImV4cCI6MjA5MDUxNTI4NH0.GyL9zRyB0DA456ZjjGEb-SA4HVRaNxQIDxMARvGZRXA';
 const _cache={};
 
@@ -631,6 +631,11 @@ const DB={
     // session always to localStorage, never Supabase
     if(k==='session'){_setSession(v);return;}
     _cache[k]=v;
+    // Auto-backup important data to localStorage every time it changes
+    // This means even if Supabase is wiped, data can be recovered from any device
+    if(k==='tasks'||k==='users'||k==='props'){
+      try{localStorage.setItem('pf_backup_'+k, JSON.stringify({data:v,savedAt:new Date().toISOString()}));}catch(e){}
+    }
     _supaSet(k,v);
   }
 };
@@ -674,6 +679,11 @@ async function _supaGetAll(){
         if(_dirtyKeys.has(row.key)) return; // locally modified — don't overwrite
         try{
           const incoming=JSON.parse(row.value);
+          // Safety: never accept an empty users array from Supabase
+          // This prevents a bad write from wiping out all team members
+          if(row.key==='users'&&Array.isArray(incoming)&&incoming.length===0) return;
+          // Safety: never accept demo data (identified by demo emails)
+          if(row.key==='users'&&Array.isArray(incoming)&&incoming.some(u=>u.email==='admin@propfix.com'||u.email==='runner@propfix.com')) return;
           // For 'tasks': merge at per-task level using updatedAt — take the NEWER version of each task
           // This prevents any user's refresh from overwriting another user's status change
           if(row.key==='tasks'&&Array.isArray(incoming)&&Array.isArray(_cache['tasks'])){
@@ -732,20 +742,20 @@ const CAT_CFG={
 const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 function initDB(){
-  // IMPORTANT: only set cache locally — never write demo data to Supabase
-  // This prevents demo data from overwriting real data when a new device loads the app
-  function localSet(k,v){_cache[k]=v;} // cache only, no Supabase write
+  // Only set safe empty defaults in local cache — NEVER writes to Supabase
+  // Real user data must already exist in Supabase — no demo data ever
+  function localSet(k,v){_cache[k]=v;}
   if(!DB.get('users')) localSet('users',[
     {id:'u1',name:'Manager',email:'manager@propfix.com',password:'manager123',role:'manager',wa:''},
-    {id:'u2',name:'Admin Sarah',email:'admin@propfix.com',password:'admin123',role:'admin',wa:'60123456789'},
-    {id:'u3',name:'Admin Lee',email:'admin2@propfix.com',password:'admin123',role:'admin',wa:'60134567890'},
-    {id:'u4',name:'Runner Ali',email:'runner@propfix.com',password:'runner123',role:'runner',wa:'60112345678'},
-    {id:'u5',name:'Runner Mei',email:'runner2@propfix.com',password:'runner123',role:'runner',wa:'60198887777'},
+    {id:'u2',name:'Lyana',email:'lyanad247@gmail.com',password:'lyana222',role:'admin',wa:''},
+    {id:'u3',name:'Irene',email:'irenelu27@gmail.com',password:'irene444',role:'admin',wa:''},
+    {id:'u4',name:'Nashrul',email:'adamsayoy@icloud.com',password:'nashrul666',role:'runner',wa:''},
+    {id:'u5',name:'Nayon',email:'mdnoyon011332178@gmail.com',password:'nayon888',role:'runner',wa:''},
   ]);
   if(!DB.get('tasks')) localSet('tasks',[]);
   if(!DB.get('todos')) localSet('todos',{});
   if(!DB.get('props')) localSet('props',[]);
-  if(!DB.get('nid')) localSet('nid',100);
+  if(!DB.get('nid')) localSet('nid',1000);
 }
 function nextId(){const n=DB.get('nid')||100;DB.set('nid',n+1);return 'id'+n;}
 
@@ -2331,17 +2341,51 @@ function populateUnitDropdown(){
 }
 
 document.querySelectorAll('.modal-bg').forEach(bg=>bg.addEventListener('click',e=>{if(e.target===bg)bg.classList.remove('open');}));
-// Boot: always reload fresh data from Supabase, then restore per-device session
+// Boot: load from Supabase first, then set safe defaults for any missing keys
 (async function(){
   showLoader();
-  try{
-    await _supaGetAll(); // load latest data from Supabase into cache
-  }catch(e){
-    console.warn('Initial load failed',e);
+  let supaLoaded=false;
+  for(let attempt=1;attempt<=3;attempt++){
+    try{
+      await _supaGetAll();
+      supaLoaded=true;
+      break;
+    }catch(e){
+      console.warn('Boot load attempt',attempt,'failed',e);
+      if(attempt<3) await new Promise(r=>setTimeout(r,1000*attempt));
+    }
   }
-  initDB(); // seed defaults only if no data exists yet
+  if(!supaLoaded){
+    // Network failure — show clear message, do NOT load demo data
+    hideLoader();
+    document.getElementById('auth-screen').style.display='flex';
+    const err=document.getElementById('auth-error');
+    err.textContent='⚠️ Cannot connect to server. Check your internet and refresh the page.';
+    err.style.display='block';
+    return;
+  }
+  // Restore from localStorage backup if Supabase data is empty but backup exists
+  ['tasks','props'].forEach(k=>{
+    try{
+      const current=_cache[k];
+      const isEmpty=!current||(Array.isArray(current)&&current.length===0);
+      if(isEmpty){
+        const backup=localStorage.getItem('pf_backup_'+k);
+        if(backup){
+          const parsed=JSON.parse(backup);
+          if(parsed.data&&Array.isArray(parsed.data)&&parsed.data.length>0){
+            console.log('Restoring',k,'from localStorage backup saved at',parsed.savedAt);
+            _cache[k]=parsed.data;
+            // Write backup back to Supabase to restore it
+            _supaSet(k,parsed.data);
+          }
+        }
+      }
+    }catch(e){}
+  });
+  initDB(); // only fills missing keys with safe empty defaults — never overwrites Supabase data
   hideLoader();
-  tryAutoLogin(); // session is per-device localStorage — unaffected by other users
+  tryAutoLogin();
 })();
 </script>
 </body>
