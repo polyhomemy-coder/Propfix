@@ -732,30 +732,20 @@ const CAT_CFG={
 const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 function initDB(){
-  if(!DB.get('users')) DB.set('users',[
+  // IMPORTANT: only set cache locally — never write demo data to Supabase
+  // This prevents demo data from overwriting real data when a new device loads the app
+  function localSet(k,v){_cache[k]=v;} // cache only, no Supabase write
+  if(!DB.get('users')) localSet('users',[
     {id:'u1',name:'Manager',email:'manager@propfix.com',password:'manager123',role:'manager',wa:''},
     {id:'u2',name:'Admin Sarah',email:'admin@propfix.com',password:'admin123',role:'admin',wa:'60123456789'},
     {id:'u3',name:'Admin Lee',email:'admin2@propfix.com',password:'admin123',role:'admin',wa:'60134567890'},
     {id:'u4',name:'Runner Ali',email:'runner@propfix.com',password:'runner123',role:'runner',wa:'60112345678'},
     {id:'u5',name:'Runner Mei',email:'runner2@propfix.com',password:'runner123',role:'runner',wa:'60198887777'},
   ]);
-  const now=new Date().toISOString();
-  const today=now.split('T')[0];
-  if(!DB.get('tasks')) DB.set('tasks',[
-    {id:'t1',condoId:'p1',condo:'Subang Jaya Block C',unit:'A-12-03',area:'Kitchen',category:'Plumbing',priority:'Urgent',title:'Fix leaking sink pipe',desc:'Water pooling under cabinet.',remark:'Tenant called twice.',assigneeId:'u4',assigneeRole:'runner',status:'In Progress',scheduled:'',schedNote:'',createdBy:'u2',mirrorOf:'',createdAt:new Date(Date.now()-7200000).toISOString(),doneAt:''},
-    {id:'t1m',condoId:'p1',condo:'Subang Jaya Block C',unit:'A-12-03',area:'Kitchen',category:'Plumbing',priority:'Urgent',title:'Fix leaking sink pipe',desc:'Water pooling under cabinet.',remark:'Tenant called twice.',assigneeId:'u2',assigneeRole:'admin',status:'In Progress',scheduled:'',schedNote:'',createdBy:'u2',mirrorOf:'t1',createdAt:new Date(Date.now()-7200000).toISOString(),doneAt:''},
-    {id:'t2',condoId:'p2',condo:'Puchong Perdana Tower',unit:'B-05-11',area:'Corridor',category:'Electrical',priority:'Normal',title:'Faulty circuit breaker',desc:'Level 5 units 11-14 affected.',remark:'',assigneeId:'u5',assigneeRole:'runner',status:'To Do',scheduled:'',schedNote:'',createdBy:'u2',mirrorOf:'',createdAt:new Date(Date.now()-86400000).toISOString(),doneAt:''},
-    {id:'t2m',condoId:'p2',condo:'Puchong Perdana Tower',unit:'B-05-11',area:'Corridor',category:'Electrical',priority:'Normal',title:'Faulty circuit breaker',desc:'Level 5 units 11-14 affected.',remark:'',assigneeId:'u2',assigneeRole:'admin',status:'To Do',scheduled:'',schedNote:'',createdBy:'u2',mirrorOf:'t2',createdAt:new Date(Date.now()-86400000).toISOString(),doneAt:''},
-    {id:'t3',condoId:'p3',condo:'Shah Alam Residency',unit:'Lobby Level 1',area:'Main Hall',category:'Cleaning',priority:'Low',title:'Post-renovation deep clean',desc:'Full deep clean after works.',remark:'',assigneeId:'u4',assigneeRole:'runner',status:'Done',scheduled:today,schedNote:'Morning 8am',createdBy:'u3',mirrorOf:'',createdAt:new Date(Date.now()-172800000).toISOString(),doneAt:now},
-    {id:'t3m',condoId:'p3',condo:'Shah Alam Residency',unit:'Lobby Level 1',area:'Main Hall',category:'Cleaning',priority:'Low',title:'Post-renovation deep clean',desc:'Full deep clean after works.',remark:'',assigneeId:'u3',assigneeRole:'admin',status:'Done',scheduled:today,schedNote:'Morning 8am',createdBy:'u3',mirrorOf:'t3',createdAt:new Date(Date.now()-172800000).toISOString(),doneAt:now},
-  ]);
-  if(!DB.get('todos')) DB.set('todos',{});
-  if(!DB.get('props')) DB.set('props',[
-    {id:'p1',name:'Subang Jaya Block C',city:'KL',units:['A-12-01','A-12-02','A-12-03','B-03-01','B-03-02','Level 1 Lobby','Carpark']},
-    {id:'p2',name:'Puchong Perdana Tower',city:'KL',units:['B-05-10','B-05-11','C-08-01','Level 5 Corridor','Rooftop']},
-    {id:'p3',name:'Shah Alam Residency',city:'KL',units:['Lobby Level 1','Lobby Level 2','D-11-01','Pool Area','Gym']},
-  ]);
-  if(!DB.get('nid')) DB.set('nid',100);
+  if(!DB.get('tasks')) localSet('tasks',[]);
+  if(!DB.get('todos')) localSet('todos',{});
+  if(!DB.get('props')) localSet('props',[]);
+  if(!DB.get('nid')) localSet('nid',100);
 }
 function nextId(){const n=DB.get('nid')||100;DB.set('nid',n+1);return 'id'+n;}
 
