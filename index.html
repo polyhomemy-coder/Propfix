@@ -1678,9 +1678,6 @@ function renderTodos(){
 }
 
 // ═══════════════════ DONE REPORT ═══════════════════
-  sel.innerHTML=opts;
-}
-
 function renderDoneToday(){
   const dateStr=document.getElementById('done-date-picker').value||todayStr();
   const tasks=DB.get('tasks')||[];
