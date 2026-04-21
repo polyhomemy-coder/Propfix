@@ -2127,37 +2127,45 @@ function renderStats(){
     ${propData.length?sectionTitle('Property Hotspots')+'<div style="background:var(--white);border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:20px">'+propBars+'</div>':''}
   `;
 
-  // Append backup history section for admin/manager
-  if(CU&&(CU.role==='admin'||CU.role==='manager')){
-    try{
-      const hist=DB.get('backup_history')||[];
-      let histHtml=sectionTitle('💾 Backup History');
-      if(hist.length===0){
-        histHtml+=`<div style="background:var(--white);border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:20px;font-size:13px;color:var(--gray-400)">No backups done yet. Click "Back Up PropFix Data" to create your first backup.</div>`;
-      } else {
-        histHtml+=`<div style="background:var(--white);border-radius:var(--radius-lg);box-shadow:var(--shadow);overflow:hidden">`;
-        hist.forEach((h,i)=>{
-          const d=new Date(h.date);
-          const dateLabel=d.toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
-          const timeLabel=d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
-          histHtml+=`<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 20px;${i>0?'border-top:1px solid var(--gray-100)':''}">
-            <div style="display:flex;align-items:center;gap:12px">
-              <div style="width:36px;height:36px;border-radius:50%;background:var(--green-light);color:var(--green);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">💾</div>
-              <div>
-                <div style="font-size:13px;font-weight:600;color:var(--gray-900)">${dateLabel} at ${timeLabel}</div>
-                <div style="font-size:11px;color:var(--gray-500);margin-top:2px">By ${esc(h.by||'Unknown')} · ${h.tasks||0} tasks · ${h.props||0} properties · ${h.members||0} members</div>
-                <div style="font-size:10px;color:var(--gray-400);margin-top:1px">📄 ${esc(h.filename||'')}</div>
-              </div>
-            </div>
-            ${i===0?`<span style="font-size:10px;font-weight:700;background:var(--green-light);color:var(--green);padding:2px 8px;border-radius:20px">Latest</span>`:`<span style="font-size:11px;color:var(--gray-400)">${i+1} backup${i+1>1?'s':''} ago</span>`}
-          </div>`;
-        });
-        histHtml+=`</div>`;
-      }
-      html+=histHtml;
-    }catch(e){}
-  }
   document.getElementById('stat-container').innerHTML=html;
+
+  // Append backup history AFTER setting innerHTML — admin/manager only
+  if(CU&&(CU.role==='admin'||CU.role==='manager')){
+    const hist=DB.get('backup_history')||[];
+    const titleDiv=document.createElement('div');
+    titleDiv.style.cssText='font-size:13px;font-weight:700;color:var(--gray-700);text-transform:uppercase;letter-spacing:0.06em;margin:24px 0 12px';
+    titleDiv.textContent='💾 Backup History';
+    document.getElementById('stat-container').appendChild(titleDiv);
+    const card=document.createElement('div');
+    card.style.cssText='background:var(--white);border-radius:var(--radius-lg);box-shadow:var(--shadow);overflow:hidden';
+    if(hist.length===0){
+      card.style.padding='20px';
+      card.style.fontSize='13px';
+      card.style.color='var(--gray-400)';
+      card.textContent='No backups done yet. Click "Back Up PropFix Data" above to create your first backup.';
+    } else {
+      hist.forEach((h,i)=>{
+        const d=new Date(h.date);
+        const dateLabel=d.toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
+        const timeLabel=d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+        const row=document.createElement('div');
+        row.style.cssText='display:flex;align-items:center;justify-content:space-between;padding:14px 20px;'+(i>0?'border-top:1px solid var(--gray-100)':'');
+        row.innerHTML=`
+          <div style="display:flex;align-items:center;gap:12px">
+            <div style="width:36px;height:36px;border-radius:50%;background:#dcfce7;color:#16a34a;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">💾</div>
+            <div>
+              <div style="font-size:13px;font-weight:600;color:var(--gray-900)">${dateLabel} at ${timeLabel}</div>
+              <div style="font-size:11px;color:var(--gray-500);margin-top:2px">By <strong>${esc(h.by||'Unknown')}</strong> &nbsp;·&nbsp; ${h.tasks||0} tasks &nbsp;·&nbsp; ${h.props||0} properties &nbsp;·&nbsp; ${h.members||0} members</div>
+              <div style="font-size:10px;color:var(--gray-400);margin-top:2px">📄 ${esc(h.filename||'')}</div>
+            </div>
+          </div>
+          ${i===0?'<span style="font-size:10px;font-weight:700;background:#dcfce7;color:#16a34a;padding:3px 10px;border-radius:20px">Latest</span>':'<span style="font-size:11px;color:var(--gray-400)">'+(i+1)+' backups ago</span>'}
+        `;
+        card.appendChild(row);
+      });
+    }
+    document.getElementById('stat-container').appendChild(card);
+  }
 
   // Draw all pies with animation
   setTimeout(()=>{
