@@ -1030,9 +1030,10 @@ function exportBackup(){
   const props=DB.get('props')||[];
   const todos=DB.get('todos')||{};
   const nid=DB.get('nid')||1000;
+  const now=new Date();
   const backup={
     version:'propfix-backup-v1',
-    exportedAt:new Date().toISOString(),
+    exportedAt:now.toISOString(),
     exportedBy:CU?CU.name:'Unknown',
     data:{tasks,users,props,todos,nid}
   };
@@ -1041,12 +1042,25 @@ function exportBackup(){
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
   a.href=url;
-  const now=new Date();
   const dateStr=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
   a.download='PropFix_Backup_'+dateStr+'.json';
   document.body.appendChild(a);a.click();
   setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(url);},1000);
+  // Save backup entry to Supabase so ALL devices/admins can see the history
+  const newEntry={
+    date:now.toISOString(),
+    by:CU?CU.name:'Unknown',
+    tasks:tasks.length,
+    props:props.length,
+    members:users.length,
+    filename:'PropFix_Backup_'+dateStr+'.json'
+  };
+  const existingHist=DB.get('backup_history')||[];
+  const updatedHist=[newEntry,...existingHist].slice(0,20); // keep last 20
+  DB.set('backup_history', updatedHist); // writes to Supabase — visible on all devices
   showToast('✅ Backup saved — '+tasks.length+' tasks · '+props.length+' properties · '+users.length+' members');
+  // Refresh stats page to show updated history
+  if(document.getElementById('page-stat').classList.contains('active')) renderStats();
 }
 
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
@@ -2113,6 +2127,36 @@ function renderStats(){
     ${propData.length?sectionTitle('Property Hotspots')+'<div style="background:var(--white);border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:20px">'+propBars+'</div>':''}
   `;
 
+  // Append backup history section for admin/manager
+  if(CU&&(CU.role==='admin'||CU.role==='manager')){
+    try{
+      const hist=DB.get('backup_history')||[];
+      let histHtml=sectionTitle('💾 Backup History');
+      if(hist.length===0){
+        histHtml+=`<div style="background:var(--white);border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:20px;font-size:13px;color:var(--gray-400)">No backups done yet. Click "Back Up PropFix Data" to create your first backup.</div>`;
+      } else {
+        histHtml+=`<div style="background:var(--white);border-radius:var(--radius-lg);box-shadow:var(--shadow);overflow:hidden">`;
+        hist.forEach((h,i)=>{
+          const d=new Date(h.date);
+          const dateLabel=d.toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
+          const timeLabel=d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+          histHtml+=`<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 20px;${i>0?'border-top:1px solid var(--gray-100)':''}">
+            <div style="display:flex;align-items:center;gap:12px">
+              <div style="width:36px;height:36px;border-radius:50%;background:var(--green-light);color:var(--green);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">💾</div>
+              <div>
+                <div style="font-size:13px;font-weight:600;color:var(--gray-900)">${dateLabel} at ${timeLabel}</div>
+                <div style="font-size:11px;color:var(--gray-500);margin-top:2px">By ${esc(h.by||'Unknown')} · ${h.tasks||0} tasks · ${h.props||0} properties · ${h.members||0} members</div>
+                <div style="font-size:10px;color:var(--gray-400);margin-top:1px">📄 ${esc(h.filename||'')}</div>
+              </div>
+            </div>
+            ${i===0?`<span style="font-size:10px;font-weight:700;background:var(--green-light);color:var(--green);padding:2px 8px;border-radius:20px">Latest</span>`:`<span style="font-size:11px;color:var(--gray-400)">${i+1} backup${i+1>1?'s':''} ago</span>`}
+          </div>`;
+        });
+        histHtml+=`</div>`;
+      }
+      html+=histHtml;
+    }catch(e){}
+  }
   document.getElementById('stat-container').innerHTML=html;
 
   // Draw all pies with animation
