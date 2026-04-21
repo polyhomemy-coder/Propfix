@@ -406,16 +406,23 @@ textarea.mfi{resize:vertical;min-height:72px;font-size:14px}
           <button class="btn btn-sm" id="tv-list-btn" onclick="setTaskViewMode('list')">List</button>
         </div>
       </div>
-      <div class="status-tabs" id="status-tabs">
-        <div class="status-tab active" onclick="setStatusTab('To Do',this)">To Do <span class="status-count" id="sc-todo">0</span></div>
-        <div class="status-tab" onclick="setStatusTab('In Progress',this)">In Progress <span class="status-count" id="sc-inprog">0</span></div>
-        <div class="status-tab" onclick="setStatusTab('Done',this)">Done <span class="status-count" id="sc-done">0</span></div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+        <div class="status-tabs" id="status-tabs" style="flex:1;margin-bottom:0">
+          <div class="status-tab active" onclick="setStatusTab('To Do',this)">To Do <span class="status-count" id="sc-todo">0</span></div>
+          <div class="status-tab" onclick="setStatusTab('In Progress',this)">In Progress <span class="status-count" id="sc-inprog">0</span></div>
+          <div class="status-tab" onclick="setStatusTab('Done',this)">Done <span class="status-count" id="sc-done">0</span></div>
+        </div>
+        <select class="filter-sel" id="done-month-filter" onchange="onDoneMonthChange()" style="display:none;min-width:150px">
+          <option value="">All time</option>
+        </select>
+        <button class="btn btn-danger" id="btn-delete-done-month" onclick="deleteDoneMonth()" style="display:none;white-space:nowrap;font-size:12px">🗑 Delete This Month</button>
       </div>
       <div id="tv-grid-view"><div class="task-grid" id="task-grid-container"></div></div>
       <div id="tv-list-view" style="display:none"><div class="list-wrap"><table class="list-table"><thead><tr id="list-thead-row"></tr></thead><tbody id="task-list-body"></tbody></table></div></div>
     </div>
   </div>
 
+  <!-- PAGE: DONE TODAY -->
   <!-- PAGE: DONE TODAY -->
   <div class="page" id="page-done">
     <div class="section-heading">
@@ -471,7 +478,10 @@ textarea.mfi{resize:vertical;min-height:72px;font-size:14px}
   <!-- PAGE: STATISTICS -->
   <div class="page" id="page-stat">
     <div class="section-heading"><div><div class="section-title">Statistics</div><div class="section-sub">Data analysis across all tasks</div></div>
-      <select class="filter-sel" id="stat-city-filter" onchange="renderStats()"><option value="">All Cities</option><option value="KL">KL</option><option value="JB">JB</option></select>
+      <div style="display:flex;gap:10px;align-items:center">
+        <select class="filter-sel" id="stat-city-filter" onchange="renderStats()"><option value="">All Cities</option><option value="KL">KL</option><option value="JB">JB</option></select>
+        <button class="btn" id="btn-backup" onclick="exportBackup()" style="background:#16a34a;color:white;border-color:#16a34a;display:none;white-space:nowrap">💾 Back Up PropFix Data</button>
+      </div>
     </div>
     <div id="stat-container"></div>
   </div>
@@ -863,6 +873,9 @@ function setupRole(){
     svBar.style.display='none';
     document.getElementById('filter-city').style.display='none';
   }
+  // Backup button in Statistics — admin only
+  const backupBtn=document.getElementById('btn-backup');
+  if(backupBtn) backupBtn.style.display=(r==='admin'||r==='manager')?'':'none';
   populateAssignDropdown();
 }
 
@@ -1011,6 +1024,31 @@ document.addEventListener('click',function(e){
   }
 });
 
+function exportBackup(){
+  const tasks=DB.get('tasks')||[];
+  const users=DB.get('users')||[];
+  const props=DB.get('props')||[];
+  const todos=DB.get('todos')||{};
+  const nid=DB.get('nid')||1000;
+  const backup={
+    version:'propfix-backup-v1',
+    exportedAt:new Date().toISOString(),
+    exportedBy:CU?CU.name:'Unknown',
+    data:{tasks,users,props,todos,nid}
+  };
+  const json=JSON.stringify(backup,null,2);
+  const blob=new Blob([json],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  const now=new Date();
+  const dateStr=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+  a.download='PropFix_Backup_'+dateStr+'.json';
+  document.body.appendChild(a);a.click();
+  setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(url);},1000);
+  showToast('✅ Backup saved — '+tasks.length+' tasks · '+props.length+' properties · '+users.length+' members');
+}
+
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
 
 // ── Ripple effect on all clickable elements ──
@@ -1095,8 +1133,29 @@ function getTasksForRole(){
   return all;
 }
 
+function populateDoneMonthFilter(){
+  const sel=document.getElementById('done-month-filter');if(!sel||sel.options.length>1)return;
+  const now=new Date();
+  for(let i=0;i<12;i++){
+    const d=new Date(now.getFullYear(),now.getMonth()-i,1);
+    const val=d.getFullYear()+'-'+d.getMonth();
+    const opt=document.createElement('option');
+    opt.value=val;opt.textContent=MONTHS[d.getMonth()]+' '+d.getFullYear();
+    sel.appendChild(opt);
+  }
+}
+
 function applyFilters(tasks){
   let t=tasks.filter(x=>x.status===taskStatusFilter);
+  // If Done tab + month filter selected, filter by doneAt month
+  if(taskStatusFilter==='Done'){
+    const mf=document.getElementById('done-month-filter');
+    const mv=mf?mf.value:'';
+    if(mv){
+      const parts=mv.split('-');const yr=parseInt(parts[0]),mo=parseInt(parts[1]);
+      t=t.filter(x=>{if(!x.doneAt)return false;const d=new Date(x.doneAt);return d.getFullYear()===yr&&d.getMonth()===mo;});
+    }
+  }
   if(taskSearch) t=t.filter(x=>(x.title+x.desc+x.condo+x.unit+x.category).toLowerCase().includes(taskSearch.toLowerCase()));
   if(taskPri) t=t.filter(x=>x.priority===taskPri);
   if(taskAssignee) t=t.filter(x=>x.assigneeId===taskAssignee);
@@ -1246,7 +1305,35 @@ function setTaskSubview(sv,el){
   }
   renderTasks();
 }
-function setStatusTab(s,el){taskStatusFilter=s;document.querySelectorAll('#status-tabs .status-tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderTasks();}
+function onDoneMonthChange(){
+  // Show delete button only when a specific month is selected and user is admin/manager
+  const mf=document.getElementById('done-month-filter');
+  const db=document.getElementById('btn-delete-done-month');
+  if(db&&mf&&CU){
+    const canDelete=(CU.role==='admin'||CU.role==='manager')&&mf.value!=='';
+    db.style.display=canDelete?'':'none';
+  }
+  renderTasks();
+}
+
+function setStatusTab(s,el){
+  taskStatusFilter=s;
+  document.querySelectorAll('#status-tabs .status-tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  // Show month filter only on Done tab
+  const mf=document.getElementById('done-month-filter');
+  const db=document.getElementById('btn-delete-done-month');
+  if(mf){
+    if(s==='Done'){
+      mf.style.display='';
+      populateDoneMonthFilter();
+    } else {
+      mf.style.display='none';
+      if(db) db.style.display='none';
+    }
+  }
+  renderTasks();
+}
 function setTaskSearch(v){taskSearch=v;renderTasks();}
 function setTaskPri(v){taskPri=v;renderTasks();}
 function setTaskAssignee(v){taskAssignee=v;renderTasks();}
@@ -1258,6 +1345,37 @@ function setTaskViewMode(v){
   document.getElementById('tv-grid-btn').style.cssText=v==='grid'?'background:#0c4a6e;color:white;border-color:#0c4a6e':'';
   document.getElementById('tv-list-btn').style.cssText=v==='list'?'background:#0c4a6e;color:white;border-color:#0c4a6e':'';
   renderTasks();
+}
+
+function deleteDoneMonth(){
+  const mf=document.getElementById('done-month-filter');
+  if(!mf||!mf.value){showToast('Please select a month first');return;}
+  const parts=mf.value.split('-');
+  const yr=parseInt(parts[0]),mo=parseInt(parts[1]);
+  const monthName=MONTHS[mo]+' '+yr;
+  if(!confirm('Delete ALL done task cards for '+monthName+'?\n\nThis cannot be undone.')) return;
+  const tasks=DB.get('tasks')||[];
+  // Remove done tasks (and their mirrors) where doneAt falls in selected month
+  const toDelete=new Set();
+  tasks.forEach(t=>{
+    if(t.status==='Done'&&t.doneAt){
+      const d=new Date(t.doneAt);
+      if(d.getFullYear()===yr&&d.getMonth()===mo){
+        toDelete.add(t.id);
+        if(t.mirrorOf) toDelete.add(t.mirrorOf);
+        // also delete the mirror of this task
+        const mirror=tasks.find(m=>m.mirrorOf===t.id);
+        if(mirror) toDelete.add(mirror.id);
+      }
+    }
+  });
+  const remaining=tasks.filter(t=>!toDelete.has(t.id));
+  DB.set('tasks',remaining);
+  // Reset month filter
+  mf.value='';
+  document.getElementById('btn-delete-done-month').style.display='none';
+  renderTasks();
+  showToast('Deleted '+toDelete.size/2+' done tasks for '+monthName);
 }
 
 function quickStatus(id,status){
@@ -1559,59 +1677,47 @@ function renderTodos(){
     :'<div style="text-align:center;padding:20px;font-size:13px;color:var(--gray-400)">No tasks in this status.</div>';
 }
 
-// ═══════════════════ DONE TODAY ═══════════════════
+// ═══════════════════ DONE REPORT ═══════════════════
+  sel.innerHTML=opts;
+}
+
 function renderDoneToday(){
   const dateStr=document.getElementById('done-date-picker').value||todayStr();
   const tasks=DB.get('tasks')||[];
   const todos=DB.get('todos')||{};
   const users=DB.get('users')||[];
   const r=CU.role;
-
   function doneItemHTML(icon,bg,title,sub,who){
     return `<div class="done-item"><div class="done-check">✓</div><div style="width:30px;height:30px;border-radius:8px;background:${bg};display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">${icon}</div><div class="done-info"><div class="done-desc">${esc(title)}</div><div class="done-sub">${esc(sub)}</div></div>${who?`<span class="done-who">${esc(who)}</span>`:''}</div>`;
   }
   function makeSection(title,items){
     return `<div class="person-section"><div class="person-header"><span class="person-name">${title}</span><span class="person-count">${items.length}</span></div>${items.length?`<div class="done-panel">${items.join('')}</div>`:'<div style="font-size:13px;color:var(--gray-400);padding:10px 16px">No tasks completed.</div>'}</div>`;
   }
-
   if(r==='manager'){
-    // Show each person individually
     const targets=users.filter(u=>u.role!=='manager');
     const html=targets.map(u=>{
       const items=[];
-      // Assigned tasks done by this person (non-mirror for runners, mirrors for admins)
       const doneTasks=tasks.filter(t=>t.assigneeId===u.id&&isSameDay(t.doneAt,dateStr)&&(u.role==='runner'?!t.mirrorOf:true));
       doneTasks.forEach(t=>{const cfg=CAT_CFG[t.category]||{icon:'📋',bg:'#f0fdf4'};items.push(doneItemHTML(cfg.icon,cfg.bg,t.title||t.desc,t.condo?(t.condo+' · '+t.unit+(t.area?' · '+t.area:'')):'Note',''));});
-      // Personal todos for admins
-      if(u.role==='admin'){
-        (todos[u.id]||[]).filter(t=>isSameDay(t.doneAt,dateStr)).forEach(t=>items.push(doneItemHTML('📝','#f5f3ff',t.text,'Personal task','')));
-      }
+      if(u.role==='admin'){(todos[u.id]||[]).filter(t=>isSameDay(t.doneAt,dateStr)).forEach(t=>items.push(doneItemHTML('📝','#f5f3ff',t.text,'Personal task','')));}
       return makeSection(u.name+` (${u.role})`,items);
     }).join('');
     document.getElementById('done-today-container').innerHTML=html;
   } else if(r==='admin'){
-    // Admin sees: each runner individually (ALL runners, not just ones they created tasks for)
-    //             + their own completed tasks
-    //             does NOT see other admins' tasks
     const runners=users.filter(u=>u.role==='runner');
     let html='';
     runners.forEach(runner=>{
-      // All runner tasks done by this runner today (non-mirror only)
       const doneTasks=tasks.filter(t=>t.assigneeId===runner.id&&!t.mirrorOf&&isSameDay(t.doneAt,dateStr));
       const items=doneTasks.map(t=>{const cfg=CAT_CFG[t.category]||{icon:'📋',bg:'#f0fdf4'};return doneItemHTML(cfg.icon,cfg.bg,t.title||t.desc,t.condo?(t.condo+' · '+t.unit+(t.area?' · '+t.area:'')):'Note','');});
       html+=makeSection('Runner '+runner.name,items);
     });
-    // Admin's own done tasks (non-mirror direct assignments + their mirror monitoring tasks + personal todos)
     const myDone=tasks.filter(t=>t.assigneeId===CU.id&&!t.mirrorOf&&isSameDay(t.doneAt,dateStr));
     const myTodos=(todos[CU.id]||[]).filter(t=>isSameDay(t.doneAt,dateStr));
-    const myItems=[
-      ...myDone.map(t=>{const cfg=CAT_CFG[t.category]||{icon:'📋',bg:'#f0fdf4'};return doneItemHTML(cfg.icon,cfg.bg,t.title||t.desc,t.condo?(t.condo+' · '+t.unit+(t.area?' · '+t.area:'')):'Note','');}),
-      ...myTodos.map(t=>doneItemHTML('📝','#f5f3ff',t.text,'Personal task',''))
-    ];
+    const myItems=[...myDone.map(t=>{const cfg=CAT_CFG[t.category]||{icon:'📋',bg:'#f0fdf4'};return doneItemHTML(cfg.icon,cfg.bg,t.title||t.desc,t.condo?(t.condo+' · '+t.unit+(t.area?' · '+t.area:'')):'Note','');}),
+      ...myTodos.map(t=>doneItemHTML('📝','#f5f3ff',t.text,'Personal task',''))];
     html+=makeSection('My Completed Tasks ('+CU.name+')',myItems);
     document.getElementById('done-today-container').innerHTML=html;
   } else {
-    // Runner own done
     const items=tasks.filter(t=>t.assigneeId===CU.id&&!t.mirrorOf&&isSameDay(t.doneAt,dateStr)).map(t=>{const cfg=CAT_CFG[t.category]||{icon:'📋',bg:'#f0fdf4'};return doneItemHTML(cfg.icon,cfg.bg,t.title||t.desc,t.condo?(t.condo+' · '+t.unit+(t.area?' · '+t.area:'')):'Note','');});
     document.getElementById('done-today-container').innerHTML=makeSection('My Completed Tasks',items);
   }
