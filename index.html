@@ -406,13 +406,15 @@ textarea.mfi{resize:vertical;min-height:72px;font-size:14px}
           <button class="btn btn-sm" id="tv-list-btn" onclick="setTaskViewMode('list')">List</button>
         </div>
       </div>
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px">
-        <div class="status-tabs" id="status-tabs" style="flex:1;margin-bottom:0">
-          <div class="status-tab active" onclick="setStatusTab('To Do',this)">To Do <span class="status-count" id="sc-todo">0</span></div>
-          <div class="status-tab" onclick="setStatusTab('In Progress',this)">In Progress <span class="status-count" id="sc-inprog">0</span></div>
-          <div class="status-tab" onclick="setStatusTab('Done',this)">Done <span class="status-count" id="sc-done">0</span></div>
-        </div>
-        <select class="filter-sel" id="done-month-filter" onchange="onDoneMonthChange()" style="display:none;min-width:150px">
+      <div class="status-tabs" id="status-tabs" style="margin-bottom:0">
+        <div class="status-tab active" onclick="setStatusTab('To Do',this)">To Do <span class="status-count" id="sc-todo">0</span></div>
+        <div class="status-tab" onclick="setStatusTab('In Progress',this)">In Progress <span class="status-count" id="sc-inprog">0</span></div>
+        <div class="status-tab" onclick="setStatusTab('Done',this)">Done <span class="status-count" id="sc-done">0</span></div>
+      </div>
+      <!-- Sub-sub bar: shown only under Done tab -->
+      <div id="done-sub-bar" style="display:none;align-items:center;gap:10px;padding:10px 12px;background:var(--gray-50);border:1px solid var(--gray-200);border-top:none;border-radius:0 0 var(--radius) var(--radius);margin-bottom:16px;flex-wrap:wrap">
+        <span style="font-size:11px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.05em">Filter by month:</span>
+        <select class="filter-sel" id="done-month-filter" onchange="onDoneMonthChange()" style="min-width:150px">
           <option value="">All time</option>
         </select>
         <button class="btn btn-danger" id="btn-delete-done-month" onclick="deleteDoneMonth()" style="display:none;white-space:nowrap;font-size:12px">🗑 Delete This Month</button>
@@ -1335,14 +1337,14 @@ function setStatusTab(s,el){
   document.querySelectorAll('#status-tabs .status-tab').forEach(t=>t.classList.remove('active'));
   el.classList.add('active');
   // Show month filter only on Done tab
-  const mf=document.getElementById('done-month-filter');
+  const subBar=document.getElementById('done-sub-bar');
   const db=document.getElementById('btn-delete-done-month');
-  if(mf){
+  if(subBar){
     if(s==='Done'){
-      mf.style.display='';
+      subBar.style.display='flex';
       populateDoneMonthFilter();
     } else {
-      mf.style.display='none';
+      subBar.style.display='none';
       if(db) db.style.display='none';
     }
   }
