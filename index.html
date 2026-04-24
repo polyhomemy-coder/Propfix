@@ -648,6 +648,8 @@ const DB={
     if(k==='tasks'||k==='users'||k==='props'){
       try{localStorage.setItem('pf_backup_'+k, JSON.stringify({data:v,savedAt:new Date().toISOString()}));}catch(e){}
     }
+    // Also update status snapshot whenever tasks change
+    if(k==='tasks'&&Array.isArray(v)) _saveStatusSnapshot(v);
     _supaSet(k,v);
   }
 };
@@ -666,7 +668,12 @@ async function _supaSet(k,v){
   for(let attempt=1;attempt<=3;attempt++){
     try{
       const r=await fetch(SUPA_URL+'/rest/v1/propfix_data',{method:'POST',headers,body});
-      if(r.ok){_unlockWrite(k);return;} // confirmed — mark clean
+      if(r.ok){
+        // Keep dirty for 10 more seconds after write confirms
+        // This protects against another device's stale refresh that arrives just after our write
+        setTimeout(()=>_unlockWrite(k), 10000);
+        return;
+      }
       console.warn('Supabase write attempt',attempt,'status',r.status);
     }catch(e){
       console.warn('Supabase write attempt',attempt,'error',e);
@@ -696,25 +703,30 @@ async function _supaGetAll(){
           if(row.key==='users'&&Array.isArray(incoming)&&incoming.length===0) return;
           // Safety: never accept demo data (identified by demo emails)
           if(row.key==='users'&&Array.isArray(incoming)&&incoming.some(u=>u.email==='admin@propfix.com'||u.email==='runner@propfix.com')) return;
-          // For 'tasks': merge at per-task level using updatedAt — take the NEWER version of each task
-          // This prevents any user's refresh from overwriting another user's status change
-          if(row.key==='tasks'&&Array.isArray(incoming)&&Array.isArray(_cache['tasks'])){
-            const localMap=new Map(_cache['tasks'].map(t=>[t.id,t]));
+          // For 'tasks': smart merge — always keep the NEWER version of each task
+          // NEVER delete local tasks during a refresh (prevents disappearing task bug)
+          // Deletions only happen via explicit deleteTask() call
+          if(row.key==='tasks'&&Array.isArray(incoming)){
+            const localTasks=Array.isArray(_cache['tasks'])?_cache['tasks']:[];
+            const localMap=new Map(localTasks.map(t=>[t.id,t]));
             incoming.forEach(remoteTask=>{
               const local=localMap.get(remoteTask.id);
               if(!local){
-                // New task from another user — add it
+                // Task exists on remote but not local — add it (new task from another user)
                 localMap.set(remoteTask.id,remoteTask);
               } else {
-                // Both exist — keep whichever has the newer updatedAt
+                // Task exists on both — keep whichever has newer updatedAt
                 const localTime=local.updatedAt?new Date(local.updatedAt).getTime():0;
                 const remoteTime=remoteTask.updatedAt?new Date(remoteTask.updatedAt).getTime():0;
-                if(remoteTime>localTime) localMap.set(remoteTask.id,remoteTask);
+                if(remoteTime>localTime){
+                  localMap.set(remoteTask.id,remoteTask);
+                }
+                // If equal or local is newer — keep local (no change)
               }
             });
-            // Also remove tasks deleted on remote that aren't in local dirty
-            const remoteIds=new Set(incoming.map(t=>t.id));
-            [...localMap.keys()].forEach(id=>{if(!remoteIds.has(id)) localMap.delete(id);});
+            // NOTE: We intentionally do NOT delete local tasks missing from remote.
+            // Tasks are only removed via explicit deleteTask(). This prevents
+            // partial Supabase responses from causing tasks to disappear.
             _cache['tasks']=[...localMap.values()];
           } else {
             _cache[row.key]=incoming;
@@ -789,6 +801,7 @@ function doLogin(){
 function doLogout(){
   CU=null;
   stopAutoRefresh();
+  if(_idleTimer){clearTimeout(_idleTimer);_idleTimer=null;}
   DB.set('session',null); // clears localStorage session for THIS device
   document.getElementById('app').style.display='none';
   document.getElementById('auth-screen').style.display='flex';
@@ -811,6 +824,33 @@ function tryAutoLogin(){
 // ═══════════════════ BOOT ═══════════════════
 // ── Auto-refresh: reload Supabase data every 60s to stay in sync ──
 let _refreshTimer=null;
+let _idleTimer=null;
+const IDLE_TIMEOUT=60*60*1000; // 1 hour in milliseconds
+
+function _resetIdleTimer(){
+  if(_idleTimer) clearTimeout(_idleTimer);
+  if(!CU) return;
+  _idleTimer=setTimeout(()=>{
+    // 1 hour of no interaction — show session expired prompt
+    stopAutoRefresh();
+    const overlay=document.createElement('div');
+    overlay.style.cssText='position:fixed;inset:0;background:rgba(12,74,110,0.92);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
+    overlay.innerHTML=`
+      <div style="background:white;border-radius:20px;padding:36px 32px;max-width:340px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+        <div style="font-size:40px;margin-bottom:16px">⏰</div>
+        <div style="font-size:18px;font-weight:700;color:#0f172a;margin-bottom:8px">Session Expired</div>
+        <div style="font-size:14px;color:#64748b;margin-bottom:24px;line-height:1.6">You've been inactive for 1 hour.<br>Tap below to refresh and get the latest data.</div>
+        <button onclick="location.reload()" style="width:100%;padding:14px;background:#0891b2;color:white;border:none;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit">🔄 Refresh PropFix</button>
+      </div>`;
+    document.body.appendChild(overlay);
+  }, IDLE_TIMEOUT);
+}
+
+// Track user activity — any interaction resets the idle timer
+['click','touchstart','keydown','scroll'].forEach(evt=>{
+  document.addEventListener(evt, _resetIdleTimer, {passive:true});
+});
+
 function startAutoRefresh(){
   stopAutoRefresh();
   _refreshTimer=setInterval(async()=>{
@@ -838,7 +878,7 @@ function showApp(){
   document.getElementById('app').style.display='flex';
   document.getElementById('topbar-user').textContent=CU.name;
   const rb=document.getElementById('role-badge');rb.textContent=CU.role.charAt(0).toUpperCase()+CU.role.slice(1);rb.className='role-badge '+CU.role;
-  buildNav();populateCondoDropdown();populatePerfMonths();startAutoRefresh();
+  buildNav();populateCondoDropdown();populatePerfMonths();startAutoRefresh();_resetIdleTimer();
   document.getElementById('done-date-picker').value=todayStr();_dpUpdateBtn('done-date-picker',todayStr());
   setupRole();showPage('page-tasks');
 }
@@ -1411,15 +1451,55 @@ function quickStatus(id,status){
   // 1. Mark tasks as dirty and update cache — auto-refresh will NOT overwrite this
   _dirtyKeys.add('tasks');
   _cache['tasks']=tasks;
-  // 2. Flag to suppress the ghost click Chrome fires when native <select> closes
+  // 2. Save status snapshot to localStorage — survives browser refresh
+  _saveStatusSnapshot(tasks);
+  // 3. Flag to suppress the ghost click Chrome fires when native <select> closes
   _statusJustChanged=true;
-  setTimeout(()=>{_statusJustChanged=false;},350); // safety reset if click never fires
-  // 3. Re-render immediately — card moves to correct tab NOW
+  setTimeout(()=>{_statusJustChanged=false;},350);
+  // 4. Re-render immediately — card moves to correct tab NOW
   _suppressStagger=true;
   renderTasks();
-  // 4. Write to Supabase (async) — when confirmed, 'tasks' removed from dirty set
+  // 5. Write to Supabase (async) — when confirmed, 'tasks' removed from dirty set
   _supaSet('tasks',tasks);
   showToast('Status updated!');
+}
+
+// ── Status snapshot: save {id->status, updatedAt} to localStorage ──
+// This is a lightweight map — survives browser refresh
+// Used to restore correct statuses after a manual page refresh
+function _saveStatusSnapshot(tasks){
+  try{
+    const snap={};
+    tasks.forEach(t=>{snap[t.id]={status:t.status,doneAt:t.doneAt||'',updatedAt:t.updatedAt||''};});
+    localStorage.setItem('pf_status_snap',JSON.stringify({snap,savedAt:new Date().toISOString()}));
+  }catch(e){}
+}
+
+function _applyStatusSnapshot(tasks){
+  // After loading from Supabase on boot, apply any locally-known statuses
+  // that are newer than what Supabase returned
+  try{
+    const raw=localStorage.getItem('pf_status_snap');
+    if(!raw) return false;
+    const {snap,savedAt}=JSON.parse(raw);
+    // Only apply if snapshot is less than 24 hours old
+    if(new Date()-new Date(savedAt)>86400000) return false;
+    let changed=false;
+    tasks.forEach(t=>{
+      const s=snap[t.id];
+      if(!s) return;
+      const snapTime=s.updatedAt?new Date(s.updatedAt).getTime():0;
+      const taskTime=t.updatedAt?new Date(t.updatedAt).getTime():0;
+      if(snapTime>taskTime){
+        // Local snapshot has a newer status — apply it
+        t.status=s.status;
+        t.doneAt=s.doneAt;
+        t.updatedAt=s.updatedAt;
+        changed=true;
+      }
+    });
+    return changed;
+  }catch(e){return false;}
 }
 function deleteTask(id){
   if(!confirm('Delete this task?'))return;
@@ -2521,7 +2601,7 @@ document.querySelectorAll('.modal-bg').forEach(bg=>bg.addEventListener('click',e
     err.style.display='block';
     return;
   }
-  // Restore from localStorage backup if Supabase data is empty but backup exists
+  // Restore from localStorage backup if Supabase data is empty
   ['tasks','props'].forEach(k=>{
     try{
       const current=_cache[k];
@@ -2533,13 +2613,26 @@ document.querySelectorAll('.modal-bg').forEach(bg=>bg.addEventListener('click',e
           if(parsed.data&&Array.isArray(parsed.data)&&parsed.data.length>0){
             console.log('Restoring',k,'from localStorage backup saved at',parsed.savedAt);
             _cache[k]=parsed.data;
-            // Write backup back to Supabase to restore it
             _supaSet(k,parsed.data);
           }
         }
       }
     }catch(e){}
   });
+
+  // Apply status snapshot — restores correct task statuses after a manual browser refresh
+  // This fixes the bug where refreshing the page loads stale statuses from Supabase
+  const tasks=_cache['tasks'];
+  if(Array.isArray(tasks)&&tasks.length>0){
+    const changed=_applyStatusSnapshot(tasks);
+    if(changed){
+      // Write corrected statuses back to Supabase so all devices get the right data
+      _cache['tasks']=tasks;
+      _supaSet('tasks',tasks);
+      console.log('Status snapshot applied — corrected task statuses after refresh');
+    }
+  }
+
   initDB(); // only fills missing keys with safe empty defaults — never overwrites Supabase data
   hideLoader();
   tryAutoLogin();
