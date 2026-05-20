@@ -661,16 +661,64 @@ function _lockWrite(key){_writeLock++;if(key)_dirtyKeys.add(key);}
 function _unlockWrite(key){_writeLock=Math.max(0,_writeLock-1);if(key)_dirtyKeys.delete(key);}
 
 // ── SUPABASE WRITE: reliable with retry + write-lock ──
+async function _fetchSupabaseTasks(){
+  // Fetch the current tasks array directly from Supabase (not from cache)
+  try{
+    const r=await fetch(SUPA_URL+"/rest/v1/propfix_data?select=value&key=eq.tasks",{
+      headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY}
+    });
+    if(!r.ok) return null;
+    const rows=await r.json();
+    if(Array.isArray(rows)&&rows.length>0){
+      return JSON.parse(rows[0].value);
+    }
+  }catch(e){}
+  return null;
+}
+
+function _mergeTaskArrays(localTasks, remoteTasks){
+  // Merge two task arrays — keep the newer version of each task
+  // and NEVER lose tasks that exist in either array
+  if(!Array.isArray(remoteTasks)||remoteTasks.length===0) return localTasks;
+  const merged=new Map(localTasks.map(t=>[t.id,t]));
+  remoteTasks.forEach(remoteTask=>{
+    const local=merged.get(remoteTask.id);
+    if(!local){
+      // Task only exists in Supabase — another device created it — ADD it
+      merged.set(remoteTask.id,remoteTask);
+    } else {
+      // Both have it — keep newer updatedAt
+      const localTime=local.updatedAt?new Date(local.updatedAt).getTime():0;
+      const remoteTime=remoteTask.updatedAt?new Date(remoteTask.updatedAt).getTime():0;
+      if(remoteTime>localTime) merged.set(remoteTask.id,remoteTask);
+    }
+  });
+  return [...merged.values()];
+}
+
 async function _supaSet(k,v){
   _lockWrite(k); // mark this key as dirty
-  const body=JSON.stringify({key:k,value:JSON.stringify(v),updated_at:new Date().toISOString()});
+
+  let valueToWrite=v;
+
+  // For tasks: fetch current Supabase state and merge BEFORE writing
+  // This ensures we never lose tasks created by other devices
+  if(k==='tasks'&&Array.isArray(v)){
+    const remoteCurrentTasks=await _fetchSupabaseTasks();
+    if(remoteCurrentTasks&&Array.isArray(remoteCurrentTasks)){
+      valueToWrite=_mergeTaskArrays(v, remoteCurrentTasks);
+      // Also update local cache with the merged result
+      _cache['tasks']=valueToWrite;
+    }
+  }
+
+  const body=JSON.stringify({key:k,value:JSON.stringify(valueToWrite),updated_at:new Date().toISOString()});
   const headers={'Content-Type':'application/json','apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Prefer':'resolution=merge-duplicates'};
   for(let attempt=1;attempt<=3;attempt++){
     try{
       const r=await fetch(SUPA_URL+'/rest/v1/propfix_data',{method:'POST',headers,body});
       if(r.ok){
         // Keep dirty for 10 more seconds after write confirms
-        // This protects against another device's stale refresh that arrives just after our write
         setTimeout(()=>_unlockWrite(k), 10000);
         return;
       }
