@@ -661,67 +661,14 @@ function _lockWrite(key){_writeLock++;if(key)_dirtyKeys.add(key);}
 function _unlockWrite(key){_writeLock=Math.max(0,_writeLock-1);if(key)_dirtyKeys.delete(key);}
 
 // ── SUPABASE WRITE: reliable with retry + write-lock ──
-async function _fetchSupabaseTasks(){
-  // Fetch the current tasks array directly from Supabase (not from cache)
-  try{
-    const r=await fetch(SUPA_URL+"/rest/v1/propfix_data?select=value&key=eq.tasks",{
-      headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY}
-    });
-    if(!r.ok) return null;
-    const rows=await r.json();
-    if(Array.isArray(rows)&&rows.length>0){
-      return JSON.parse(rows[0].value);
-    }
-  }catch(e){}
-  return null;
-}
-
-function _mergeTaskArrays(localTasks, remoteTasks){
-  // Merge two task arrays — keep the newer version of each task
-  // and NEVER lose tasks that exist in either array
-  if(!Array.isArray(remoteTasks)||remoteTasks.length===0) return localTasks;
-  const merged=new Map(localTasks.map(t=>[t.id,t]));
-  remoteTasks.forEach(remoteTask=>{
-    const local=merged.get(remoteTask.id);
-    if(!local){
-      // Task only exists in Supabase — another device created it — ADD it
-      merged.set(remoteTask.id,remoteTask);
-    } else {
-      // Both have it — keep newer updatedAt
-      const localTime=local.updatedAt?new Date(local.updatedAt).getTime():0;
-      const remoteTime=remoteTask.updatedAt?new Date(remoteTask.updatedAt).getTime():0;
-      if(remoteTime>localTime) merged.set(remoteTask.id,remoteTask);
-    }
-  });
-  return [...merged.values()];
-}
-
 async function _supaSet(k,v){
-  _lockWrite(k); // mark this key as dirty
-
-  let valueToWrite=v;
-
-  // For tasks: fetch current Supabase state and merge BEFORE writing
-  // This ensures we never lose tasks created by other devices
-  if(k==='tasks'&&Array.isArray(v)){
-    const remoteCurrentTasks=await _fetchSupabaseTasks();
-    if(remoteCurrentTasks&&Array.isArray(remoteCurrentTasks)){
-      valueToWrite=_mergeTaskArrays(v, remoteCurrentTasks);
-      // Also update local cache with the merged result
-      _cache['tasks']=valueToWrite;
-    }
-  }
-
-  const body=JSON.stringify({key:k,value:JSON.stringify(valueToWrite),updated_at:new Date().toISOString()});
+  _lockWrite(k);
+  const body=JSON.stringify({key:k,value:JSON.stringify(v),updated_at:new Date().toISOString()});
   const headers={'Content-Type':'application/json','apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Prefer':'resolution=merge-duplicates'};
   for(let attempt=1;attempt<=3;attempt++){
     try{
       const r=await fetch(SUPA_URL+'/rest/v1/propfix_data',{method:'POST',headers,body});
-      if(r.ok){
-        // Keep dirty for 10 more seconds after write confirms
-        setTimeout(()=>_unlockWrite(k), 10000);
-        return;
-      }
+      if(r.ok){setTimeout(()=>_unlockWrite(k),10000);return;}
       console.warn('Supabase write attempt',attempt,'status',r.status);
     }catch(e){
       console.warn('Supabase write attempt',attempt,'error',e);
@@ -751,30 +698,25 @@ async function _supaGetAll(){
           if(row.key==='users'&&Array.isArray(incoming)&&incoming.length===0) return;
           // Safety: never accept demo data (identified by demo emails)
           if(row.key==='users'&&Array.isArray(incoming)&&incoming.some(u=>u.email==='admin@propfix.com'||u.email==='runner@propfix.com')) return;
-          // For 'tasks': smart merge — always keep the NEWER version of each task
-          // NEVER delete local tasks during a refresh (prevents disappearing task bug)
-          // Deletions only happen via explicit deleteTask() call
+          // For 'tasks': smart merge — keep newer version, respect tombstones
           if(row.key==='tasks'&&Array.isArray(incoming)){
             const localTasks=Array.isArray(_cache['tasks'])?_cache['tasks']:[];
+            const tombstones=new Set(_cache['deleted_tasks']||[]);
             const localMap=new Map(localTasks.map(t=>[t.id,t]));
             incoming.forEach(remoteTask=>{
+              // Never re-add a task that was explicitly deleted on this device
+              if(tombstones.has(remoteTask.id)) return;
               const local=localMap.get(remoteTask.id);
               if(!local){
-                // Task exists on remote but not local — add it (new task from another user)
+                // New task from another user — add it
                 localMap.set(remoteTask.id,remoteTask);
               } else {
-                // Task exists on both — keep whichever has newer updatedAt
+                // Keep whichever has newer updatedAt
                 const localTime=local.updatedAt?new Date(local.updatedAt).getTime():0;
                 const remoteTime=remoteTask.updatedAt?new Date(remoteTask.updatedAt).getTime():0;
-                if(remoteTime>localTime){
-                  localMap.set(remoteTask.id,remoteTask);
-                }
-                // If equal or local is newer — keep local (no change)
+                if(remoteTime>localTime) localMap.set(remoteTask.id,remoteTask);
               }
             });
-            // NOTE: We intentionally do NOT delete local tasks missing from remote.
-            // Tasks are only removed via explicit deleteTask(). This prevents
-            // partial Supabase responses from causing tasks to disappear.
             _cache['tasks']=[...localMap.values()];
           } else {
             _cache[row.key]=incoming;
@@ -917,7 +859,7 @@ function startAutoRefresh(){
       if(id==='page-cal') renderCalendar();
       if(id==='page-stat') renderStats();
     }
-  },60000); // every 60 seconds
+  },30000); // every 30 seconds — faster sync keeps all devices current
 }
 function stopAutoRefresh(){if(_refreshTimer){clearInterval(_refreshTimer);_refreshTimer=null;}}
 
@@ -1490,6 +1432,11 @@ function deleteDoneMonth(){
     }
   });
   const remaining=tasks.filter(t=>!toDelete.has(t.id));
+  // Tombstone the deleted IDs
+  const existingTomb=_cache['deleted_tasks']||[];
+  const updatedTomb=[...new Set([...existingTomb,...toDelete])];
+  _cache['deleted_tasks']=updatedTomb;
+  _supaSet('deleted_tasks',updatedTomb);
   DB.set('tasks',remaining);
   // Reset month filter
   mf.value='';
@@ -1569,10 +1516,15 @@ function deleteTask(id){
   if(!confirm('Delete this task?'))return;
   const tasks=DB.get('tasks')||[];
   const t=tasks.find(x=>x.id===id);
-  let remaining=tasks.filter(x=>x.id!==id);
-  // delete mirror too
-  if(t&&!t.mirrorOf) remaining=remaining.filter(x=>x.mirrorOf!==id);
-  if(t&&t.mirrorOf) remaining=remaining.filter(x=>x.id!==t.mirrorOf);
+  const toRemove=new Set([id]);
+  if(t&&!t.mirrorOf){const m=tasks.find(x=>x.mirrorOf===id);if(m)toRemove.add(m.id);}
+  if(t&&t.mirrorOf) toRemove.add(t.mirrorOf);
+  // Tombstone deleted IDs so merge never re-adds them from Supabase
+  const existingTomb=_cache['deleted_tasks']||[];
+  const updatedTomb=[...new Set([...existingTomb,...toRemove])];
+  _cache['deleted_tasks']=updatedTomb;
+  _supaSet('deleted_tasks',updatedTomb);
+  const remaining=tasks.filter(x=>!toRemove.has(x.id));
   DB.set('tasks',remaining);closeModal('modal-detail');renderTasks();showToast('Deleted');
 }
 
