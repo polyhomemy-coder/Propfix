@@ -315,9 +315,9 @@ textarea.mfi{resize:vertical;min-height:72px;font-size:14px}
 
 /* USERS / PROPS */
 .users-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
-.user-card{background:var(--white);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);display:flex;align-items:center;gap:14px}
+.user-card{background:var(--white);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);display:flex;align-items:flex-start;gap:14px}
 .user-avatar{width:44px;height:44px;border-radius:50%;font-size:16px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.user-info{flex:1}
+.user-info{flex:1;min-width:0}
 .user-name{font-size:14px;font-weight:600;color:var(--gray-900)}
 .user-email{font-size:12px;color:var(--gray-500);margin-top:2px}
 .user-role{font-size:11px;font-weight:500;padding:2px 8px;border-radius:20px;margin-top:5px;display:inline-block}
@@ -515,7 +515,7 @@ textarea.mfi{resize:vertical;min-height:72px;font-size:14px}
         </div>
       </div>
       <div class="mfg"><label class="mfl-bold">Title *</label><input class="mfi" id="f-title" placeholder="Short task title, e.g. Fix kitchen sink leak"></div>
-      <div class="mfg"><label class="mfl-bold">Description</label><textarea class="mfi" id="f-desc" placeholder="Additional details about the task..."></textarea></div>
+      <div class="mfg"><label class="mfl-bold">Description</label><textarea class="mfi" id="f-desc" placeholder="- point 1&#10;- point 2&#10;- point 3" rows="4"></textarea></div>
       <div class="mfrow" id="assign-row">
         <div class="mfg"><label class="mfl">Assign To *</label><select class="mfi" id="f-assign"></select></div>
         <div class="mfg"><label class="mfl">Status</label><select class="mfi" id="f-status"><option>To Do</option><option>In Progress</option><option>Done</option></select></div>
@@ -1116,6 +1116,32 @@ function exportBackup(){
   if(document.getElementById('page-stat').classList.contains('active')) renderStats();
 }
 
+// ── Auto bullet points in description field ──
+document.addEventListener('DOMContentLoaded',function(){
+  const desc=document.getElementById('f-desc');
+  if(desc){
+    desc.addEventListener('keydown',function(e){
+      if(e.key==='Enter'){
+        e.preventDefault();
+        const pos=this.selectionStart;
+        const val=this.value;
+        // Insert newline + "- " at cursor position
+        const newVal=val.substring(0,pos)+'\n- '+val.substring(pos);
+        this.value=newVal;
+        this.selectionStart=this.selectionEnd=pos+3;
+      }
+    });
+    desc.addEventListener('focus',function(){
+      // If empty, pre-fill with "- " to start first bullet
+      if(this.value.trim()==='') this.value='- ';
+    });
+    desc.addEventListener('blur',function(){
+      // Clean up if only "- " with nothing written
+      if(this.value.trim()==='-'||this.value.trim()==='- ') this.value='';
+    });
+  }
+});
+
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
 
 // ── Ripple effect on all clickable elements ──
@@ -1596,7 +1622,7 @@ function openTaskModal(id){
       document.getElementById('f-remark').value=t.remark||'';
     }
   } else {
-    ['f-title','f-desc','f-area','f-sched-date','f-sched-note','f-remark'].forEach(i=>document.getElementById(i).value='');_dpUpdateBtn('f-sched-date','');
+    ['f-title','f-area','f-sched-date','f-sched-note','f-remark'].forEach(i=>document.getElementById(i).value='');document.getElementById('f-desc').value='- ';_dpUpdateBtn('f-sched-date','');
     document.getElementById('f-status').value='To Do';
     toggleLocationFields();populateUnitDropdown();
   }
@@ -1741,18 +1767,22 @@ function openDetail(id){
   const sep='━━━━━━━━━━';
   const div='- - - - - - - - - - - - - - -';
 
+  // Show each bullet line of description directly under title (no 📋 prefix)
+  const descLines=t.desc&&t.title
+    ? t.desc.split('\n').map(l=>l.trim()).filter(Boolean)
+    : [];
   const msgLines=[
     '🅿 PropFix',
     sep,
     locStr?'📍 '+locStr:'',
     '🏷️ '+(t.title||t.desc),
-    t.desc&&t.title?'📋 '+t.desc:'',
-    '',
+    ...descLines,
+    t.remark?'📝 '+t.remark:'',
     div,
     '👤 assign : '+aName,
     t.scheduled?'📅 schedule : '+fmtDate(t.scheduled):'',
     sep,
-  ].filter(s=>s!==undefined).join('\n');
+  ].filter(Boolean).join('\n');
 
   // Encode entire message once — WhatsApp decodes correctly, emojis show up fine
   const waMsg=encodeURIComponent(msgLines);
@@ -2428,9 +2458,14 @@ function renderUsers(){
     const editBtn=isManager&&u.role!=='manager'?`<button class="btn btn-sm" onclick="openEditUser('${u.id}')">Edit</button>`:'';
     const delBtn=isManager&&u.id!==CU.id&&u.role!=='manager'?`<button class="btn btn-sm btn-danger" onclick="deleteUser('${u.id}')">Remove</button>`:'';
     return `<div class="user-card">
-      <div class="user-avatar" style="background:${col.bg};color:${col.c}">${ini}</div>
-      <div class="user-info"><div class="user-name">${esc(u.name)}${u.id===CU.id?' (you)':''}</div><div class="user-email">${esc(u.email)}</div>${u.wa?`<div style="font-size:11px;color:var(--gray-400);margin-top:2px">WA: ${esc(u.wa)}</div>`:''}<span class="user-role ${u.role}">${u.role}</span></div>
-      <div style="display:flex;flex-direction:column;gap:5px">${editBtn}${delBtn}</div>
+      <div class="user-avatar" style="background:${col.bg};color:${col.c};flex-shrink:0">${ini}</div>
+      <div class="user-info">
+        <div class="user-name">${esc(u.name)}${u.id===CU.id?' (you)':''}</div>
+        <div class="user-email" style="word-break:break-all">${esc(u.email)}</div>
+        ${u.wa?`<div style="font-size:11px;color:var(--gray-400);margin-top:2px">WA: ${esc(u.wa)}</div>`:''}
+        <span class="user-role ${u.role}">${u.role}</span>
+      </div>
+      ${editBtn||delBtn?`<div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;margin-left:auto">${editBtn}${delBtn}</div>`:''}
     </div>`;
   }).join('');
 }
