@@ -1338,7 +1338,6 @@ function taskCardHTML(t){
     `<div class="tc-loc">${pinIcon()}<span class="tc-loc-text">${esc(t.condo)} · ${esc(t.unit)}${t.area?' · '+esc(t.area):''}</span></div>`;
 
   // ── Name chips — full "Role Name" format ──
-  // Build list of people involved: primary assignee + mirror assignee
   function nameChip(user){
     if(!user) return '';
     const cls=user.role==='runner'?'tc-name-runner':user.role==='admin'?'tc-name-admin':'tc-name-manager';
@@ -1348,12 +1347,29 @@ function taskCardHTML(t){
   let nameChips='';
   if(!isRunner){
     const allT=DB.get('tasks')||[];
-    const mirrorT=t.mirrorOf?allT.find(x=>x.id===t.mirrorOf):allT.find(x=>x.mirrorOf===t.id);
-    const otherUser=mirrorT?users.find(u=>u.id===mirrorT.assigneeId):null;
-    if(otherUser&&otherUser.id!==t.assigneeId){
-      nameChips=nameChip(a)+nameChip(otherUser);
+    // Always find the RUNNER task (original) and the ADMIN task (monitoring)
+    // regardless of which copy we are currently rendering
+    let runnerTask=null, adminMonitorTask=null;
+    if(t.mirrorOf){
+      // This card IS a monitoring copy — find the original runner task
+      runnerTask=allT.find(x=>x.id===t.mirrorOf&&x.assigneeRole==='runner');
+      adminMonitorTask=t;
+    } else if(t.assigneeRole==='runner'){
+      // This card IS the runner task — find its monitoring copy
+      runnerTask=t;
+      // Find the monitoring copy belonging to the admin viewing this
+      // (prefer current user's mirror, otherwise first admin mirror)
+      adminMonitorTask=allT.find(x=>x.mirrorOf===t.id&&x.assigneeId===CU.id)
+                    ||allT.find(x=>x.mirrorOf===t.id&&x.assigneeRole==='admin');
     } else {
+      // Direct admin task (no runner) — just show admin
       nameChips=nameChip(a);
+    }
+    if(runnerTask||adminMonitorTask){
+      const runnerUser=runnerTask?users.find(u=>u.id===runnerTask.assigneeId):null;
+      const adminUser=adminMonitorTask?users.find(u=>u.id===adminMonitorTask.assigneeId):null;
+      // Always show: Runner first, then Admin
+      nameChips=(runnerUser?nameChip(runnerUser):'')+(adminUser&&adminUser.id!==(runnerUser&&runnerUser.id)?nameChip(adminUser):'');
     }
   }
 
@@ -1701,6 +1717,14 @@ function openDetail(id){
   const tasks=DB.get('tasks')||[];const t=tasks.find(x=>x.id===id);if(!t)return;
   const users=DB.get('users')||[];const a=users.find(u=>u.id===t.assigneeId);
   const aName=a?a.name:'Unassigned';
+  // If this is a monitoring copy, show the runner's name as primary assignee in detail
+  let displayName=aName;
+  if(t.mirrorOf){
+    const allTasksD=DB.get('tasks')||[];
+    const origTask=allTasksD.find(x=>x.id===t.mirrorOf);
+    const origUser=origTask?users.find(u=>u.id===origTask.assigneeId):null;
+    if(origUser) displayName=origUser.name+' (Runner)';
+  }
   const canEdit=CU.role==='manager'||CU.role==='admin';
   const isRunnerOwner=CU.role==='runner'&&t.assigneeId===CU.id;
   const cfg=CAT_CFG[t.category]||{icon:'📋',bg:'#f0fdf4'};
@@ -1720,7 +1744,7 @@ function openDetail(id){
     <div class="detail-grid">
       <div><div class="detail-label">Category</div><div style="display:flex;align-items:center;gap:6px;margin-top:2px"><span>${cfg.icon}</span><span>${esc(t.category)}</span></div></div>
       <div><div class="detail-label">Status</div><span class="status-badge ${sbCls(t.status)}" style="margin-top:2px;display:inline-block">${t.status}</span></div>
-      <div><div class="detail-label">Assigned To</div><div style="font-size:13px;font-weight:500;margin-top:2px">${esc(aName)}</div></div>
+      <div><div class="detail-label">Assigned To</div><div style="font-size:13px;font-weight:500;margin-top:2px">${esc(displayName)}</div></div>
       ${locBlock}
     </div>
     ${remarkBlock}
