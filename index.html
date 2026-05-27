@@ -708,8 +708,15 @@ async function _supaGetAll(){
       }catch(e){}
     });
     // Rebuild tasks array from individual rows
-    if(taskRows.length>0||!_cache['tasks']){
+    // Always replace cache with what came from Supabase if we got rows
+    // If no task rows (fresh install), keep whatever initDB set
+    if(taskRows.length>0){
       _cache['tasks']=taskRows;
+    }
+    // If Supabase returned 0 task rows but old blob 'tasks' exists, migrate it
+    if(taskRows.length===0&&Array.isArray(_cache['tasks'])&&_cache['tasks'].length>0){
+      console.log('Found old tasks blob — migrating to per-task rows');
+      _cache['tasks'].forEach(t=>_writeTask(t));
     }
   }catch(e){
     console.warn('Supabase load error',e);
