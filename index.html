@@ -633,100 +633,115 @@ const SESSION_KEY='propfix_session_v1';
 function _getSession(){try{return localStorage.getItem(SESSION_KEY)||null;}catch(e){return null;}}
 function _setSession(v){try{if(v)localStorage.setItem(SESSION_KEY,v);else localStorage.removeItem(SESSION_KEY);}catch(e){}}
 
-const DB={
-  get(k){
-    // session always from localStorage, never Supabase
-    if(k==='session') return _getSession();
-    return _cache[k]!==undefined?_cache[k]:null;
-  },
-  set(k,v){
-    // session always to localStorage, never Supabase
-    if(k==='session'){_setSession(v);return;}
-    _cache[k]=v;
-    // Auto-backup important data to localStorage every time it changes
-    // This means even if Supabase is wiped, data can be recovered from any device
-    if(k==='tasks'||k==='users'||k==='props'){
-      try{localStorage.setItem('pf_backup_'+k, JSON.stringify({data:v,savedAt:new Date().toISOString()}));}catch(e){}
-    }
-    // Also update status snapshot whenever tasks change
-    if(k==='tasks'&&Array.isArray(v)) _saveStatusSnapshot(v);
-    _supaSet(k,v);
-  }
-};
+// ══════════════════════════════════════════════
+// DATA LAYER — Per-task Supabase rows (like real apps)
+// Each task = its own row: key='task_id123'
+// No more blob overwrite. No more lost tasks. Ever.
+// ══════════════════════════════════════════════
 
-// ── Write-lock: prevents auto-refresh from overwriting in-flight saves ──
-let _writeLock=0;
-let _dirtyKeys=new Set(); // keys modified locally but not yet confirmed written to Supabase
-function _lockWrite(key){_writeLock++;if(key)_dirtyKeys.add(key);}
-function _unlockWrite(key){_writeLock=Math.max(0,_writeLock-1);if(key)_dirtyKeys.delete(key);}
+const HEADERS={'Content-Type':'application/json','apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY};
 
-// ── SUPABASE WRITE: reliable with retry + write-lock ──
-async function _supaSet(k,v){
-  _lockWrite(k);
-  const body=JSON.stringify({key:k,value:JSON.stringify(v),updated_at:new Date().toISOString()});
-  const headers={'Content-Type':'application/json','apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY,'Prefer':'resolution=merge-duplicates'};
-  for(let attempt=1;attempt<=3;attempt++){
+// ── Write a single task row ──
+async function _writeTask(task){
+  const body=JSON.stringify({key:'task_'+task.id,value:JSON.stringify(task),updated_at:new Date().toISOString()});
+  for(let i=1;i<=3;i++){
     try{
-      const r=await fetch(SUPA_URL+'/rest/v1/propfix_data',{method:'POST',headers,body});
-      if(r.ok){setTimeout(()=>_unlockWrite(k),10000);return;}
-      console.warn('Supabase write attempt',attempt,'status',r.status);
-    }catch(e){
-      console.warn('Supabase write attempt',attempt,'error',e);
-    }
-    if(attempt<3) await new Promise(res=>setTimeout(res,800*attempt));
+      const r=await fetch(SUPA_URL+'/rest/v1/propfix_data',{
+        method:'POST',headers:{...HEADERS,'Prefer':'resolution=merge-duplicates'},body
+      });
+      if(r.ok) return true;
+    }catch(e){}
+    if(i<3) await new Promise(res=>setTimeout(res,600*i));
   }
-  _unlockWrite(k);
-  showToast('⚠️ Save failed — check your connection');
+  showToast('⚠️ Save failed — check connection');
+  return false;
 }
 
-// ── SUPABASE READ: load everything except session ──
+// ── Hard delete a task row from Supabase ──
+async function _deleteTaskRow(taskId){
+  try{
+    await fetch(SUPA_URL+"/rest/v1/propfix_data?key=eq.task_"+taskId,{
+      method:'DELETE',headers:HEADERS
+    });
+  }catch(e){}
+}
+
+// ── Write non-task data (users, props, todos etc) ──
+async function _writeBlob(k,v){
+  const body=JSON.stringify({key:k,value:JSON.stringify(v),updated_at:new Date().toISOString()});
+  for(let i=1;i<=3;i++){
+    try{
+      const r=await fetch(SUPA_URL+'/rest/v1/propfix_data',{
+        method:'POST',headers:{...HEADERS,'Prefer':'resolution=merge-duplicates'},body
+      });
+      if(r.ok) return;
+    }catch(e){}
+    if(i<3) await new Promise(res=>setTimeout(res,600*i));
+  }
+  showToast('⚠️ Save failed — check connection');
+}
+
+// ── Read ALL rows from Supabase ──
 async function _supaGetAll(){
   try{
-    const r=await fetch(SUPA_URL+'/rest/v1/propfix_data?select=key,value',{
-      headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+SUPA_KEY}
-    });
+    const r=await fetch(SUPA_URL+'/rest/v1/propfix_data?select=key,value',{headers:HEADERS});
     if(!r.ok) throw new Error('HTTP '+r.status);
     const rows=await r.json();
-    if(Array.isArray(rows)){
-      rows.forEach(row=>{
-        if(row.key==='session') return; // never from Supabase
-        if(_dirtyKeys.has(row.key)) return; // locally modified — don't overwrite
-        try{
-          const incoming=JSON.parse(row.value);
-          // Safety: never accept an empty users array from Supabase
-          // This prevents a bad write from wiping out all team members
-          if(row.key==='users'&&Array.isArray(incoming)&&incoming.length===0) return;
-          // Safety: never accept demo data (identified by demo emails)
-          if(row.key==='users'&&Array.isArray(incoming)&&incoming.some(u=>u.email==='admin@propfix.com'||u.email==='runner@propfix.com')) return;
-          // For 'tasks': smart merge — keep newer version, respect tombstones
-          if(row.key==='tasks'&&Array.isArray(incoming)){
-            const localTasks=Array.isArray(_cache['tasks'])?_cache['tasks']:[];
-            const tombstones=new Set(_cache['deleted_tasks']||[]);
-            const localMap=new Map(localTasks.map(t=>[t.id,t]));
-            incoming.forEach(remoteTask=>{
-              // Never re-add a task that was explicitly deleted on this device
-              if(tombstones.has(remoteTask.id)) return;
-              const local=localMap.get(remoteTask.id);
-              if(!local){
-                // New task from another user — add it
-                localMap.set(remoteTask.id,remoteTask);
-              } else {
-                // Keep whichever has newer updatedAt
-                const localTime=local.updatedAt?new Date(local.updatedAt).getTime():0;
-                const remoteTime=remoteTask.updatedAt?new Date(remoteTask.updatedAt).getTime():0;
-                if(remoteTime>localTime) localMap.set(remoteTask.id,remoteTask);
-              }
-            });
-            _cache['tasks']=[...localMap.values()];
-          } else {
-            _cache[row.key]=incoming;
+    if(!Array.isArray(rows)) return;
+    const taskRows=[];
+    rows.forEach(row=>{
+      if(row.key==='session') return;
+      try{
+        if(row.key.startsWith('task_')){
+          // Individual task row
+          taskRows.push(JSON.parse(row.value));
+        } else {
+          // Blob (users, props, todos, nid etc)
+          const val=JSON.parse(row.value);
+          // Safety checks for users
+          if(row.key==='users'){
+            if(!Array.isArray(val)||val.length===0) return;
+            if(val.some(u=>u.email==='admin@propfix.com'||u.email==='runner@propfix.com')) return;
           }
-        }catch(e){}
-      });
+          _cache[row.key]=val;
+        }
+      }catch(e){}
+    });
+    // Rebuild tasks array from individual rows
+    if(taskRows.length>0||!_cache['tasks']){
+      _cache['tasks']=taskRows;
     }
   }catch(e){
     console.warn('Supabase load error',e);
   }
+}
+
+// ── DB interface (same API as before — rest of app unchanged) ──
+const DB={
+  get(k){
+    if(k==='session') return _getSession();
+    return _cache[k]!==undefined?_cache[k]:null;
+  },
+  set(k,v){
+    if(k==='session'){_setSession(v);return;}
+    _cache[k]=v;
+    // Backup to localStorage
+    if(k==='tasks'||k==='users'||k==='props'){
+      try{localStorage.setItem('pf_backup_'+k,JSON.stringify({data:v,savedAt:new Date().toISOString()}));}catch(e){}
+    }
+    if(k==='tasks'&&Array.isArray(v)) _saveStatusSnapshot(v);
+    // Tasks are written individually — blobs written as one row
+    if(k!=='tasks') _writeBlob(k,v);
+    // Tasks written per-task is handled by saveTaskToSupabase / deleteTask
+  }
+};
+
+// ── Save one task to Supabase (called explicitly) ──
+function saveTaskToSupabase(task){
+  _writeTask(task);
+  // Also save its mirror if it exists
+  const mirror=(DB.get('tasks')||[]).find(t=>t.mirrorOf===task.id||t.id===task.mirrorOf);
+  if(mirror) _writeTask(mirror);
 }
 function showLoader(){
   let el=document.getElementById('pf-loader');
@@ -845,7 +860,6 @@ function startAutoRefresh(){
   stopAutoRefresh();
   _refreshTimer=setInterval(async()=>{
     if(!CU) return;
-    if(_writeLock>0) return; // skip while save in-flight
     const activeModal=document.querySelector('.modal-bg.open');
     if(activeModal) return;
     await _supaGetAll();
@@ -1432,12 +1446,9 @@ function deleteDoneMonth(){
     }
   });
   const remaining=tasks.filter(t=>!toDelete.has(t.id));
-  // Tombstone the deleted IDs
-  const existingTomb=_cache['deleted_tasks']||[];
-  const updatedTomb=[...new Set([...existingTomb,...toDelete])];
-  _cache['deleted_tasks']=updatedTomb;
-  _supaSet('deleted_tasks',updatedTomb);
-  DB.set('tasks',remaining);
+  DB.set('tasks',remaining); // update cache
+  // Hard delete each done task row from Supabase
+  toDelete.forEach(tid=>_deleteTaskRow(tid));
   // Reset month filter
   mf.value='';
   document.getElementById('btn-delete-done-month').style.display='none';
@@ -1459,19 +1470,17 @@ function quickStatus(id,status){
     const orig=tasks.find(o=>o.id===t.mirrorOf);
     if(orig){orig.status=status;orig.updatedAt=now;orig.doneAt=t.doneAt;}
   }
-  // 1. Mark tasks as dirty and update cache — auto-refresh will NOT overwrite this
-  _dirtyKeys.add('tasks');
+  // Update cache — no whole-array write needed anymore
   _cache['tasks']=tasks;
-  // 2. Save status snapshot to localStorage — survives browser refresh
   _saveStatusSnapshot(tasks);
-  // 3. Flag to suppress the ghost click Chrome fires when native <select> closes
   _statusJustChanged=true;
   setTimeout(()=>{_statusJustChanged=false;},350);
-  // 4. Re-render immediately — card moves to correct tab NOW
   _suppressStagger=true;
   renderTasks();
-  // 5. Write to Supabase (async) — when confirmed, 'tasks' removed from dirty set
-  _supaSet('tasks',tasks);
+  // Write ONLY the changed task row(s) to Supabase — never the whole array
+  _writeTask(t);
+  if(!t.mirrorOf){const mir=tasks.find(m=>m.mirrorOf===id);if(mir)_writeTask(mir);}
+  if(t.mirrorOf){const orig=tasks.find(o=>o.id===t.mirrorOf);if(orig)_writeTask(orig);}
   showToast('Status updated!');
 }
 
@@ -1520,12 +1529,10 @@ function deleteTask(id){
   if(t&&!t.mirrorOf){const m=tasks.find(x=>x.mirrorOf===id);if(m)toRemove.add(m.id);}
   if(t&&t.mirrorOf) toRemove.add(t.mirrorOf);
   // Tombstone deleted IDs so merge never re-adds them from Supabase
-  const existingTomb=_cache['deleted_tasks']||[];
-  const updatedTomb=[...new Set([...existingTomb,...toRemove])];
-  _cache['deleted_tasks']=updatedTomb;
-  _supaSet('deleted_tasks',updatedTomb);
   const remaining=tasks.filter(x=>!toRemove.has(x.id));
-  DB.set('tasks',remaining);closeModal('modal-detail');renderTasks();showToast('Deleted');
+  DB.set('tasks',remaining); // update cache
+  toRemove.forEach(tid=>_deleteTaskRow(tid)); // hard delete each row
+  closeModal('modal-detail');renderTasks();showToast('Deleted');
 }
 
 // ═══════════════════ TASK MODAL ═══════════════════
@@ -1645,7 +1652,11 @@ function saveTask(){
         // runner task reassigned — mirror stays with original admin creator
       }
     }
-    DB.set('tasks',tasks);closeModal('modal-task');renderTasks();showToast('Task updated!');
+    DB.set('tasks',tasks); // update cache
+  // Write updated task row individually
+  const updatedTask=tasks.find(t=>t.id===editTaskId);
+  if(updatedTask) _writeTask(updatedTask);
+  closeModal('modal-task');renderTasks();showToast('Task updated!');
     return;
   }
 
@@ -1661,7 +1672,14 @@ function saveTask(){
   }
   // Manager creating for runner/admin — no mirror needed (manager monitors via tasks tab)
 
-  DB.set('tasks',tasks);closeModal('modal-task');renderTasks();showToast('Task created!');
+  DB.set('tasks',tasks); // update cache
+  // Write each new task individually to Supabase
+  _writeTask(task);
+  if(r==='admin'&&assignee&&assignee.role==='runner'){
+    const mirrorTask=tasks[tasks.length-1];
+    _writeTask(mirrorTask);
+  }
+  closeModal('modal-task');renderTasks();showToast('Task created!');
 }
 
 // ═══════════════════ TASK DETAIL ═══════════════════
@@ -1759,7 +1777,9 @@ function saveSchedule(){
   const date=document.getElementById('sched-date').value;if(!date){showToast('Please select a date');return;}
   const tasks=DB.get('tasks')||[];const t=tasks.find(x=>x.id===schedTaskId);
   if(t){t.scheduled=date;t.schedNote=document.getElementById('sched-note').value.trim();t.updatedAt=new Date().toISOString();}
-  DB.set('tasks',tasks);closeModal('modal-schedule');renderTasks();if(typeof renderCalendar==='function')renderCalendar();showToast('Scheduled for '+fmtDate(date));
+  DB.set('tasks',tasks);
+  const sTask=tasks.find(t=>t.id===schedTaskId);if(sTask)_writeTask(sTask);
+  closeModal('modal-schedule');renderTasks();if(typeof renderCalendar==='function')renderCalendar();showToast('Scheduled for '+fmtDate(date));
 }
 
 // ═══════════════════ ADMIN PERSONAL TODO ═══════════════════
@@ -2637,12 +2657,28 @@ document.querySelectorAll('.modal-bg').forEach(bg=>bg.addEventListener('click',e
           if(parsed.data&&Array.isArray(parsed.data)&&parsed.data.length>0){
             console.log('Restoring',k,'from localStorage backup saved at',parsed.savedAt);
             _cache[k]=parsed.data;
-            _supaSet(k,parsed.data);
+            _writeBlob(k,parsed.data);
           }
         }
       }
     }catch(e){}
   });
+
+  // MIGRATION: if old 'tasks' blob exists in Supabase, migrate to per-task rows
+  // This runs once and converts old data to new architecture
+  if(Array.isArray(_cache['tasks'])&&_cache['tasks'].length>0){
+    const needsMigration=!_cache['_migrated_v2'];
+    if(needsMigration){
+      console.log('Migrating tasks to per-task rows...');
+      _cache['_migrated_v2']=true;
+      _writeBlob('_migrated_v2',true);
+      // Write each task as its own row
+      _cache['tasks'].forEach(t=>_writeTask(t));
+      // Remove the old blob (replace with empty marker)
+      _writeBlob('tasks','[]');
+      console.log('Migration complete — '+_cache['tasks'].length+' tasks migrated');
+    }
+  }
 
   // Apply status snapshot — restores correct task statuses after a manual browser refresh
   // This fixes the bug where refreshing the page loads stale statuses from Supabase
@@ -2652,8 +2688,7 @@ document.querySelectorAll('.modal-bg').forEach(bg=>bg.addEventListener('click',e
     if(changed){
       // Write corrected statuses back to Supabase so all devices get the right data
       _cache['tasks']=tasks;
-      _supaSet('tasks',tasks);
-      console.log('Status snapshot applied — corrected task statuses after refresh');
+          console.log('Status snapshot applied — corrected task statuses after refresh');
     }
   }
 
