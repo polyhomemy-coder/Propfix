@@ -524,7 +524,7 @@ textarea.mfi{resize:vertical;min-height:72px;font-size:14px}
         </div>
       </div>
       <div class="mfg" id="title-field"><label class="mfl-bold">Title</label><input class="mfi" id="f-title" placeholder="Short task title, e.g. Fix kitchen sink leak"></div>
-      <div class="mfrow">
+      <div class="mfrow" id="schedule-row">
         <div class="mfg"><label class="mfl">Schedule Date</label>
           <div class="custom-date-wrap">
             <input class="mfi" id="f-sched-date" type="hidden">
@@ -533,7 +533,6 @@ textarea.mfi{resize:vertical;min-height:72px;font-size:14px}
         </div>
         <div class="mfg"><label class="mfl">Schedule Note</label><input class="mfi" type="text" id="f-sched-note" placeholder="e.g. Morning 9am"></div>
       </div>
-      <div class="mfg"><label class="mfl">Remark</label><input class="mfi" id="f-remark" placeholder="Any additional notes or remarks..."></div>
     </div>
     <div class="modal-footer"><button class="btn" onclick="closeModal('modal-task')">Cancel</button><button class="btn btn-primary" onclick="saveTask()">Save Task</button></div>
   </div>
@@ -1695,6 +1694,9 @@ function openTaskModal(id){
     // Editing an existing task: show full manual controls, no auto-detect.
     document.getElementById('cat-pri-row').style.display='grid';
     document.getElementById('title-field').style.display='block';
+    document.getElementById('status-field').style.display='block';
+    document.getElementById('assign-row').style.gridTemplateColumns='';
+    document.getElementById('schedule-row').style.display='grid';
     const t=(DB.get('tasks')||[]).find(x=>x.id===id);
     if(t){
       // When editing: always show assign row so admin/manager can re-assign
@@ -1716,14 +1718,18 @@ function openTaskModal(id){
       document.getElementById('f-status').value=t.status;
       document.getElementById('f-sched-date').value=t.scheduled||'';_dpUpdateBtn('f-sched-date',t.scheduled||'');
       document.getElementById('f-sched-note').value=t.schedNote||'';
-      document.getElementById('f-remark').value=t.remark||'';
     }
   } else {
     // New task: category, priority and title are auto-detected from the Task
-    // text as the user types (see _onTaskDescInput) — start hidden.
+    // text as the user types (see _onTaskDescInput). Status always starts as
+    // To Do, and scheduling is done later via the Schedule button — both stay
+    // hidden here so creation is just Assign To + Task.
     document.getElementById('cat-pri-row').style.display='none';
     document.getElementById('title-field').style.display='none';
-    ['f-title','f-area','f-sched-date','f-sched-note','f-remark'].forEach(i=>document.getElementById(i).value='');document.getElementById('f-desc').value='- ';_dpUpdateBtn('f-sched-date','');
+    document.getElementById('status-field').style.display='none';
+    document.getElementById('assign-row').style.gridTemplateColumns='1fr';
+    document.getElementById('schedule-row').style.display='none';
+    ['f-title','f-area','f-sched-date','f-sched-note'].forEach(i=>document.getElementById(i).value='');document.getElementById('f-desc').value='- ';_dpUpdateBtn('f-sched-date','');
     document.getElementById('f-status').value='To Do';
     document.getElementById('f-cat').value='Plumbing';
     document.getElementById('f-pri').value='Normal';
@@ -1775,7 +1781,6 @@ function saveTask(){
     status:newStatus,
     scheduled:document.getElementById('f-sched-date').value,
     schedNote:document.getElementById('f-sched-note').value.trim(),
-    remark:document.getElementById('f-remark').value.trim(),
     updatedAt:now,
     doneAt:newStatus==='Done'?now:'',
   };
@@ -1849,7 +1854,6 @@ function openDetail(id){
   const cfg=CAT_CFG[t.category]||{icon:'📋',bg:'#f0fdf4'};
   const locBlock=t.category==='Note'?'':
     `<div><div class="detail-label">Location</div><div style="font-size:13px;font-weight:700;margin-top:2px">${esc(t.condo)} · ${esc(t.unit)}${t.area?` · ${esc(t.area)}`:''}</div></div>`;
-  const remarkBlock=t.remark?`<div style="background:var(--brand-bg);border-radius:var(--radius);padding:10px 12px;margin-top:10px;font-size:12px;color:var(--brand-dark)"><strong>Remark:</strong> ${esc(t.remark)}</div>`:'';
   const mirrorNote=t.mirrorOf?`<div style="font-size:11px;color:var(--brand);margin-bottom:8px">📋 Monitoring task — original assigned to runner</div>`:'';
 
   document.getElementById('detail-body').innerHTML=`
@@ -1866,7 +1870,6 @@ function openDetail(id){
       <div><div class="detail-label">Assigned To</div><div style="font-size:13px;font-weight:500;margin-top:2px">${esc(displayName)}</div></div>
       ${locBlock}
     </div>
-    ${remarkBlock}
     ${t.scheduled?`<div class="sched-banner"><span>📅</span><div><strong>Scheduled: ${fmtDate(t.scheduled)}</strong>${t.schedNote?`<div style="font-size:12px;margin-top:2px">${esc(t.schedNote)}</div>`:''}</div></div>`:''}
     <div class="mfg" style="margin-top:14px"><label class="mfl">Update Status</label>
       <select class="mfi" data-qid="${t.id}">
@@ -1893,7 +1896,6 @@ function openDetail(id){
     locStr?'📍 '+locStr:'',
     '🏷️ '+(t.title||t.desc),
     ...descLines,
-    t.remark?'📝 '+t.remark:'',
     div,
     '👤 assign : '+aName,
     t.scheduled?'📅 schedule : '+fmtDate(t.scheduled):'',
