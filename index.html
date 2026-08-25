@@ -136,8 +136,8 @@ input,select,textarea{font-family:inherit}
 .btn-sm{padding:5px 10px;font-size:12px}
 .btn-danger{color:var(--red);border-color:#fca5a5}
 .btn-danger:hover{background:var(--red-light)}
-.btn-wa{background:#25d366;color:white;border-color:#25d366;display:flex;align-items:center;gap:6px}
-.btn-wa:hover{background:#1db954}
+.btn-wa{background:#25d366;color:white;border-color:#25d366;display:inline-flex;align-items:center;gap:6px;text-decoration:none;cursor:pointer}
+.btn-wa:hover{background:#1db954;color:white}
 .wa-icon{width:14px;height:14px;fill:white}
 .search-input{padding:8px 12px;border-radius:var(--radius);border:1.5px solid var(--gray-200);background:var(--white);font-size:13px;color:var(--gray-800);width:200px;box-shadow:var(--shadow)}
 .search-input:focus{outline:none;border-color:var(--brand)}
@@ -496,17 +496,9 @@ textarea.mfi{resize:vertical;min-height:72px;font-size:14px}
   <div class="modal">
     <div class="modal-header"><span class="modal-title" id="modal-task-title">New Task</span><button class="modal-close" onclick="closeModal('modal-task')">×</button></div>
     <div class="modal-body">
-      <div class="mfrow">
-        <div class="mfg"><label class="mfl">Category *</label>
-          <select class="mfi" id="f-cat" onchange="toggleLocationFields()">
-            <option>Plumbing</option><option>Leaking</option><option>Electrical</option><option>Cleaning</option>
-            <option>Air-Con</option><option>Refurbish</option><option>Door Knob</option><option>Painting</option>
-            <option>Pest Control</option><option>Note</option><option>Others</option>
-          </select>
-        </div>
-        <div class="mfg"><label class="mfl">Priority *</label>
-          <select class="mfi" id="f-pri"><option value="Urgent">Urgent</option><option value="Normal" selected>Normal</option><option value="Low">Low</option></select>
-        </div>
+      <div class="mfrow" id="assign-row">
+        <div class="mfg"><label class="mfl">Assign To *</label><select class="mfi" id="f-assign"></select></div>
+        <div class="mfg" id="status-field"><label class="mfl">Status</label><select class="mfi" id="f-status"><option>To Do</option><option>In Progress</option><option>Done</option></select></div>
       </div>
       <div id="location-fields" class="loc-box">
         <div class="loc-box-title">Location</div>
@@ -516,12 +508,22 @@ textarea.mfi{resize:vertical;min-height:72px;font-size:14px}
           <div class="mfg" style="margin-bottom:0"><label class="mfl">Area / Room</label><input class="mfi" id="f-area" placeholder="e.g. Kitchen, Bedroom 2"></div>
         </div>
       </div>
-      <div class="mfg"><label class="mfl-bold">Title *</label><input class="mfi" id="f-title" placeholder="Short task title, e.g. Fix kitchen sink leak"></div>
-      <div class="mfg"><label class="mfl-bold">Description</label><textarea class="mfi" id="f-desc" placeholder="- point 1&#10;- point 2&#10;- point 3" rows="4"></textarea></div>
-      <div class="mfrow" id="assign-row">
-        <div class="mfg"><label class="mfl">Assign To *</label><select class="mfi" id="f-assign"></select></div>
-        <div class="mfg"><label class="mfl">Status</label><select class="mfi" id="f-status"><option>To Do</option><option>In Progress</option><option>Done</option></select></div>
+      <div class="mfg"><label class="mfl-bold">Task *</label><textarea class="mfi" id="f-desc" placeholder="- point 1&#10;- point 2&#10;- point 3" rows="4"></textarea>
+        <div id="f-auto-tag" style="font-size:11px;color:var(--gray-500);margin-top:6px"></div>
       </div>
+      <div class="mfrow" id="cat-pri-row">
+        <div class="mfg"><label class="mfl">Category</label>
+          <select class="mfi" id="f-cat" onchange="toggleLocationFields();_catManuallySet=true">
+            <option>Plumbing</option><option>Leaking</option><option>Electrical</option><option>Cleaning</option>
+            <option>Air-Con</option><option>Refurbish</option><option>Door Knob</option><option>Painting</option>
+            <option>Pest Control</option><option>Note</option><option>Others</option>
+          </select>
+        </div>
+        <div class="mfg"><label class="mfl">Priority</label>
+          <select class="mfi" id="f-pri" onchange="_priManuallySet=true"><option value="Urgent">Urgent</option><option value="Normal" selected>Normal</option><option value="Low">Low</option></select>
+        </div>
+      </div>
+      <div class="mfg" id="title-field"><label class="mfl-bold">Title</label><input class="mfi" id="f-title" placeholder="Short task title, e.g. Fix kitchen sink leak"></div>
       <div class="mfrow">
         <div class="mfg"><label class="mfl">Schedule Date</label>
           <div class="custom-date-wrap">
@@ -623,11 +625,32 @@ textarea.mfi{resize:vertical;min-height:72px;font-size:14px}
 <div id="toast"></div>
 
 <script>
-// ═══════════════════ DATA — SUPABASE ═══════════════════
+// ═══════════════════ CONFIG ═══════════════════
+// Everything in this block ships to the browser and is publicly readable by
+// anyone who views source. Do not put real secrets here.
+//
+// The Supabase anon key is *designed* to be public — it is not a secret, and
+// hardcoding it is normal. What actually protects the data is Row Level
+// Security on the Supabase side. Read SECURITY.md before assuming it does.
+
 const SUPA_URL='https://zbxhrsablmmcebywfepm.supabase.co';
-const COMPANY_WA_GROUP=''; // ← paste your WhatsApp group invite link here
-const PROPFIX_URL='https://polyhomemy-coder.github.io/Propfix';
 const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpieGhyc2FibG1tY2VieXdmZXBtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5MzkyODQsImV4cCI6MjA5MDUxNTI4NH0.GyL9zRyB0DA456ZjjGEb-SA4HVRaNxQIDxMARvGZRXA';
+
+// Public URL of the deployed app — used to build deep links inside shared messages.
+const PROPFIX_URL='https://polyhomemy-coder.github.io/Propfix';
+
+// WhatsApp share target for the button in the task detail modal.
+//   ''            → open WhatsApp's share picker so the sender chooses the chat
+//                   or group. This is the correct setting for sharing to a group.
+//   '60123456789' → send straight to one number. International format, digits
+//                   only, no '+', no spaces.
+//
+// A chat.whatsapp.com group-invite link does NOT belong here. WhatsApp ignores
+// prefilled text on invite links, so an invite link can never carry the task
+// details — it would just open a "join group" screen with the message dropped.
+// Leave this empty to share into a group.
+const WA_TARGET='';
+
 const _cache={};
 
 // ── SESSION: stored per-device in localStorage (never in shared Supabase) ──
@@ -783,13 +806,12 @@ function initDB(){
   // Only set safe empty defaults in local cache — NEVER writes to Supabase
   // Real user data must already exist in Supabase — no demo data ever
   function localSet(k,v){_cache[k]=v;}
-  if(!DB.get('users')) localSet('users',[
-    {id:'u1',name:'Manager',email:'manager@propfix.com',password:'manager123',role:'manager',wa:''},
-    {id:'u2',name:'Lyana',email:'lyanad247@gmail.com',password:'lyana222',role:'admin',wa:''},
-    {id:'u3',name:'Irene',email:'irenelu27@gmail.com',password:'irene444',role:'admin',wa:''},
-    {id:'u4',name:'Nashrul',email:'adamsayoy@icloud.com',password:'nashrul666',role:'runner',wa:''},
-    {id:'u5',name:'Nayon',email:'mdnoyon011332178@gmail.com',password:'nayon888',role:'runner',wa:''},
-  ]);
+  // The staff list lives in Supabase and is loaded by _supaGetAll() before this
+  // runs. It is deliberately NOT seeded with real accounts here: this file is
+  // served publicly, so any credential written in it is readable by anyone who
+  // opens View Source. An empty list means "server data not loaded yet" and
+  // doLogin() reports that as a connection problem, not a wrong password.
+  if(!DB.get('users')) localSet('users',[]);
   if(!DB.get('tasks')) localSet('tasks',[]);
   if(!DB.get('todos')) localSet('todos',{});
   if(!DB.get('props')) localSet('props',[]);
@@ -807,8 +829,15 @@ let calYear=new Date().getFullYear(),calMonth=new Date().getMonth();
 function doLogin(){
   const email=document.getElementById('login-email').value.trim().toLowerCase();
   const pass=document.getElementById('login-pass').value;
-  const u=(DB.get('users')||[]).find(u=>u.email.toLowerCase()===email&&u.password===pass);
-  if(!u){const e=document.getElementById('auth-error');e.textContent='Invalid email or password.';e.style.display='block';return;}
+  const users=DB.get('users')||[];
+  const e=document.getElementById('auth-error');
+  // No staff list at all means the Supabase load failed — don't blame the password.
+  if(!users.length){
+    e.textContent='Cannot reach the server. Check your connection and reload.';
+    e.style.display='block';return;
+  }
+  const u=users.find(u=>u.email.toLowerCase()===email&&u.password===pass);
+  if(!u){e.textContent='Invalid email or password.';e.style.display='block';return;}
   document.getElementById('auth-error').style.display='none';
   CU=u;DB.set('session',u.id);showApp();
 }
@@ -1576,6 +1605,66 @@ function toggleLocationFields(){
   document.getElementById('location-fields').style.display=cat==='Note'?'none':'block';
 }
 
+// ── Auto-categorisation for quick task creation ──
+// Runs on the free-text "Task" field so the runner/admin never has to pick a
+// category or priority by hand. Keyword match is intentionally simple and
+// visible (the guess is shown, and always overridable) rather than hidden.
+const CATEGORY_KEYWORDS={
+  'Leaking'     :['leak','leaking','leaks','drip','dripping','seep','seepage','damp','dampness','moist','wet ceiling','water stain'],
+  'Plumbing'    :['pipe','piping','plumbing','sink','faucet','tap','drain','drainage','sewer','sewage','toilet','flush','cistern','water heater','clog','clogged','choke','choked'],
+  'Electrical'  :['electrical','electric','wiring','wire','cable','socket','switch','mcb','trip','tripped','power','light','lighting','bulb','fuse','plug','short circuit'],
+  'Air-Con'     :['aircon','air-con','air con','aircond','ac unit','a/c','compressor','cooling','not cold','gas top up','remote control'],
+  'Cleaning'    :['clean','cleaning','sweep','mop','vacuum','dust','dusty','wash','sanitize','sanitise','rubbish','trash','litter'],
+  'Painting'    :['paint','painting','repaint','touch up','peeling wall','wall crack'],
+  'Door Knob'   :['door knob','doorknob','door lock','door handle','hinge','deadbolt','lockset',' knob'],
+  'Pest Control':['pest','cockroach','ant','ants','rat','rats','mouse','mice','termite','termites','mosquito','bedbug','bed bug'],
+  'Refurbish'   :['refurbish','renovate','renovation','upgrade','revamp','replace old'],
+  'Note'        :['fyi','reminder','note:','memo','follow up','followup'],
+};
+function autoDetectCategory(text){
+  const t=(text||'').toLowerCase();
+  let best='Others',bestScore=0;
+  for(const cat in CATEGORY_KEYWORDS){
+    const score=CATEGORY_KEYWORDS[cat].reduce((n,kw)=>n+(t.includes(kw)?1:0),0);
+    if(score>bestScore){bestScore=score;best=cat;}
+  }
+  return best;
+}
+const URGENT_KEYWORDS=['urgent','asap','emergency','immediately','critical','danger','dangerous','flood','flooding','burst','no water','no power','fire','electrocut','spark','sparking','smoke','gas leak'];
+function autoDetectPriority(text){
+  const t=(text||'').toLowerCase();
+  return URGENT_KEYWORDS.some(kw=>t.includes(kw))?'Urgent':'Normal';
+}
+function deriveTitleFromDesc(text){
+  const lines=(text||'').split('\n').map(l=>l.replace(/^[-*•]\s*/,'').trim()).filter(Boolean);
+  if(!lines.length) return '';
+  let title=lines[0];
+  if(title.length>70) title=title.slice(0,69).trimEnd()+'…';
+  return title;
+}
+const CAT_LABEL={'Plumbing':'🔧 Plumbing','Leaking':'💧 Leaking','Electrical':'⚡ Electrical','Cleaning':'🧹 Cleaning','Air-Con':'❄️ Air-Con','Refurbish':'🔨 Refurbish','Door Knob':'🔑 Door Knob','Painting':'🎨 Painting','Pest Control':'🐛 Pest Control','Note':'📝 Note','Others':'📋 Others'};
+let _catManuallySet=false,_priManuallySet=false;
+function _revealTaskOverrides(){
+  document.getElementById('cat-pri-row').style.display='grid';
+  document.getElementById('title-field').style.display='block';
+  document.getElementById('f-auto-tag').textContent='';
+}
+function _onTaskDescInput(){
+  if(editTaskId) return; // manual mode when editing — no auto-overwrite
+  const desc=document.getElementById('f-desc').value;
+  if(!_catManuallySet) document.getElementById('f-cat').value=autoDetectCategory(desc);
+  if(!_priManuallySet) document.getElementById('f-pri').value=autoDetectPriority(desc);
+  toggleLocationFields();
+  const tag=document.getElementById('f-auto-tag');
+  const catRowHidden=document.getElementById('cat-pri-row').style.display==='none';
+  if(catRowHidden){
+    const cat=document.getElementById('f-cat').value,pri=document.getElementById('f-pri').value;
+    tag.innerHTML=desc.trim()
+      ?`Detected: <strong>${CAT_LABEL[cat]||cat}</strong> · <strong>${pri}</strong> priority — <a href="javascript:void(0)" onclick="_revealTaskOverrides()" style="color:var(--brand)">change</a>`
+      :'';
+  }
+}
+
 function openTaskModal(id){
   editTaskId=id||null;
   const r=CU.role;
@@ -1599,7 +1688,13 @@ function openTaskModal(id){
   }
 
   document.getElementById('modal-task-title').textContent=id?'Edit Task':'New Task';
+  document.getElementById('f-desc').oninput=_onTaskDescInput;
+  _catManuallySet=false;_priManuallySet=false;
+  document.getElementById('f-auto-tag').textContent='';
   if(id){
+    // Editing an existing task: show full manual controls, no auto-detect.
+    document.getElementById('cat-pri-row').style.display='grid';
+    document.getElementById('title-field').style.display='block';
     const t=(DB.get('tasks')||[]).find(x=>x.id===id);
     if(t){
       // When editing: always show assign row so admin/manager can re-assign
@@ -1624,8 +1719,14 @@ function openTaskModal(id){
       document.getElementById('f-remark').value=t.remark||'';
     }
   } else {
+    // New task: category, priority and title are auto-detected from the Task
+    // text as the user types (see _onTaskDescInput) — start hidden.
+    document.getElementById('cat-pri-row').style.display='none';
+    document.getElementById('title-field').style.display='none';
     ['f-title','f-area','f-sched-date','f-sched-note','f-remark'].forEach(i=>document.getElementById(i).value='');document.getElementById('f-desc').value='- ';_dpUpdateBtn('f-sched-date','');
     document.getElementById('f-status').value='To Do';
+    document.getElementById('f-cat').value='Plumbing';
+    document.getElementById('f-pri').value='Normal';
     toggleLocationFields();populateUnitDropdown();
   }
   openModal('modal-task');
@@ -1633,8 +1734,21 @@ function openTaskModal(id){
 
 function saveTask(){
   const r=CU.role;
-  const title=document.getElementById('f-title').value.trim();
   const desc=document.getElementById('f-desc').value.trim();
+  const descHasContent=desc.replace(/^[-*•\s]+$/,'').length>0;
+
+  if(!editTaskId){
+    // New task: category/priority/title were never shown to the user —
+    // derive them from the Task text now, unless they were manually revealed
+    // and overridden via "change".
+    if(!descHasContent){showToast('Please enter the task details');return;}
+    if(!_catManuallySet) document.getElementById('f-cat').value=autoDetectCategory(desc);
+    if(!_priManuallySet) document.getElementById('f-pri').value=autoDetectPriority(desc);
+    const titleInput=document.getElementById('f-title');
+    if(!titleInput.value.trim()) titleInput.value=deriveTitleFromDesc(desc)||'Task';
+  }
+
+  const title=document.getElementById('f-title').value.trim();
   if(!title){showToast('Please enter a task title');return;}
   const cat=document.getElementById('f-cat').value;
   const isNote=cat==='Note';
@@ -1788,13 +1902,15 @@ function openDetail(id){
 
   // Encode entire message once — WhatsApp decodes correctly, emojis show up fine
   const waMsg=encodeURIComponent(msgLines);
-  const waUrl=COMPANY_WA_GROUP?(COMPANY_WA_GROUP+'&text='+waMsg):('https://wa.me/?text='+waMsg);
+  // Empty target → share picker (lets the sender pick a group). Digits → direct chat.
+  const waTarget=String(typeof WA_TARGET!=='undefined'?WA_TARGET:'').replace(/\D/g,'');
+  const waUrl='https://wa.me/'+waTarget+'?text='+waMsg;
 
   document.getElementById('detail-footer').innerHTML=`
-    <button class="btn btn-wa" onclick="window.open('${waUrl}','_blank')">
+    <a class="btn btn-wa" href="${waUrl}" target="_blank" rel="noopener noreferrer">
       <svg class="wa-icon" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
       WhatsApp
-    </button>
+    </a>
     ${(isRunnerOwner||canEdit)&&!t.scheduled?`<button class="btn" onclick="closeModal('modal-detail');openScheduleModal('${t.id}')">📅 Schedule</button>`:''}
     ${(isRunnerOwner||canEdit)&&t.scheduled?`<button class="btn" onclick="closeModal('modal-detail');openScheduleModal('${t.id}')">📅 Reschedule</button>`:''}
     ${canEdit?`<button class="btn" onclick="closeModal('modal-detail');openTaskModal('${t.id}')">Edit</button>`:''}
