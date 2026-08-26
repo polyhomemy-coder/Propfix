@@ -500,6 +500,10 @@ textarea.mfi{resize:vertical;min-height:72px;font-size:14px}
         <div class="mfg"><label class="mfl">Assign To *</label><select class="mfi" id="f-assign"></select></div>
         <div class="mfg" id="status-field"><label class="mfl">Status</label><select class="mfi" id="f-status"><option>To Do</option><option>In Progress</option><option>Done</option></select></div>
       </div>
+      <div class="mfg" style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <input type="checkbox" id="f-no-unit" onchange="toggleLocationFields()" style="width:16px;height:16px">
+        <label for="f-no-unit" style="font-size:12px;color:var(--gray-600);cursor:pointer">General task — not tied to a specific unit</label>
+      </div>
       <div id="location-fields" class="loc-box">
         <div class="loc-box-title">Location</div>
         <div class="mfg" style="margin-bottom:10px"><label class="mfl">Condo / Property *</label><select class="mfi" id="f-condo" onchange="populateUnitDropdown()"></select></div>
@@ -523,7 +527,6 @@ textarea.mfi{resize:vertical;min-height:72px;font-size:14px}
           <select class="mfi" id="f-pri" onchange="_priManuallySet=true"><option value="Urgent">Urgent</option><option value="Normal" selected>Normal</option><option value="Low">Low</option></select>
         </div>
       </div>
-      <div class="mfg" id="title-field"><label class="mfl-bold">Title</label><input class="mfi" id="f-title" placeholder="Short task title, e.g. Fix kitchen sink leak"></div>
       <div class="mfrow" id="schedule-row">
         <div class="mfg"><label class="mfl">Schedule Date</label>
           <div class="custom-date-wrap">
@@ -1288,6 +1291,8 @@ function applyFilters(tasks){
     const cityPropIds=new Set(props.filter(p=>taskCity==='KL'?(p.city==='KL'||!p.city):p.city===taskCity).map(p=>p.id));
     t=t.filter(x=>x.category!=='Note'&&cityPropIds.has(x.condoId)); // Note tasks have no location — hidden when city filter is active
   }
+  // Oldest first, newest last — newest task lands at the bottom of the list.
+  t=t.slice().sort((a,b)=>new Date(a.createdAt)-new Date(b.createdAt));
   return t;
 }
 
@@ -1601,7 +1606,8 @@ function deleteTask(id){
 // ═══════════════════ TASK MODAL ═══════════════════
 function toggleLocationFields(){
   const cat=document.getElementById('f-cat').value;
-  document.getElementById('location-fields').style.display=cat==='Note'?'none':'block';
+  const noUnit=document.getElementById('f-no-unit').checked;
+  document.getElementById('location-fields').style.display=(cat==='Note'||noUnit)?'none':'block';
 }
 
 // ── Auto-categorisation for quick task creation ──
@@ -1645,7 +1651,6 @@ const CAT_LABEL={'Plumbing':'🔧 Plumbing','Leaking':'💧 Leaking','Electrical
 let _catManuallySet=false,_priManuallySet=false;
 function _revealTaskOverrides(){
   document.getElementById('cat-pri-row').style.display='grid';
-  document.getElementById('title-field').style.display='block';
   document.getElementById('f-auto-tag').textContent='';
 }
 function _onTaskDescInput(){
@@ -1693,7 +1698,6 @@ function openTaskModal(id){
   if(id){
     // Editing an existing task: show full manual controls, no auto-detect.
     document.getElementById('cat-pri-row').style.display='grid';
-    document.getElementById('title-field').style.display='block';
     document.getElementById('status-field').style.display='block';
     document.getElementById('assign-row').style.gridTemplateColumns='';
     document.getElementById('schedule-row').style.display='grid';
@@ -1707,8 +1711,8 @@ function openTaskModal(id){
         if(r==='admin') populateAssignDropdown(t.assigneeRole==='runner'?'runner':'admin');
         else populateAssignDropdown('all');
       }
-      document.getElementById('f-title').value=t.title||'';
       document.getElementById('f-desc').value=t.desc||'';
+      document.getElementById('f-no-unit').checked=!t.condoId;
       document.getElementById('f-cat').value=t.category;toggleLocationFields();
       document.getElementById('f-pri').value=t.priority;
       document.getElementById('f-condo').value=t.condoId||'';populateUnitDropdown();
@@ -1723,16 +1727,16 @@ function openTaskModal(id){
     // New task: category, priority and title are auto-detected from the Task
     // text as the user types (see _onTaskDescInput). Status always starts as
     // To Do, and scheduling is done later via the Schedule button — both stay
-    // hidden here so creation is just Assign To + Task.
+    // hidden here so creation is just Assign To + optional Location + Task.
     document.getElementById('cat-pri-row').style.display='none';
-    document.getElementById('title-field').style.display='none';
     document.getElementById('status-field').style.display='none';
     document.getElementById('assign-row').style.gridTemplateColumns='1fr';
     document.getElementById('schedule-row').style.display='none';
-    ['f-title','f-area','f-sched-date','f-sched-note'].forEach(i=>document.getElementById(i).value='');document.getElementById('f-desc').value='- ';_dpUpdateBtn('f-sched-date','');
+    ['f-area','f-sched-date','f-sched-note'].forEach(i=>document.getElementById(i).value='');document.getElementById('f-desc').value='- ';_dpUpdateBtn('f-sched-date','');
     document.getElementById('f-status').value='To Do';
     document.getElementById('f-cat').value='Plumbing';
     document.getElementById('f-pri').value='Normal';
+    document.getElementById('f-no-unit').checked=false;
     toggleLocationFields();populateUnitDropdown();
   }
   openModal('modal-task');
@@ -1744,23 +1748,20 @@ function saveTask(){
   const descHasContent=desc.replace(/^[-*•\s]+$/,'').length>0;
 
   if(!editTaskId){
-    // New task: category/priority/title were never shown to the user —
-    // derive them from the Task text now, unless they were manually revealed
-    // and overridden via "change".
+    // New task: category/priority were never shown to the user — derive them
+    // from the Task text now, unless manually revealed and overridden.
     if(!descHasContent){showToast('Please enter the task details');return;}
     if(!_catManuallySet) document.getElementById('f-cat').value=autoDetectCategory(desc);
     if(!_priManuallySet) document.getElementById('f-pri').value=autoDetectPriority(desc);
-    const titleInput=document.getElementById('f-title');
-    if(!titleInput.value.trim()) titleInput.value=deriveTitleFromDesc(desc)||'Task';
   }
 
-  const title=document.getElementById('f-title').value.trim();
-  if(!title){showToast('Please enter a task title');return;}
+  // Title is never entered by hand — it's always the first line of the Task text.
+  const title=deriveTitleFromDesc(desc)||'Task';
   const cat=document.getElementById('f-cat').value;
-  const isNote=cat==='Note';
-  const condoId=isNote?'':document.getElementById('f-condo').value;
-  const unit=isNote?'':document.getElementById('f-unit').value;
-  if(!isNote&&(!condoId||!unit)){showToast('Please select condo and unit');return;}
+  const noUnit=document.getElementById('f-no-unit').checked||cat==='Note';
+  const condoId=noUnit?'':document.getElementById('f-condo').value;
+  const unit=noUnit?'':document.getElementById('f-unit').value;
+  if(!noUnit&&(!condoId||!unit)){showToast('Please select condo and unit, or tick "General task"');return;}
 
   let assigneeId='';
   if(r==='runner') assigneeId=CU.id;
@@ -1774,8 +1775,8 @@ function saveTask(){
   const tasks=DB.get('tasks')||[];
 
   const base={
-    condoId:isNote?'':condoId,condo:isNote?'':(prop?prop.name:''),
-    unit:isNote?'':unit,area:isNote?'':document.getElementById('f-area').value.trim(),
+    condoId:noUnit?'':condoId,condo:noUnit?'':(prop?prop.name:''),
+    unit:noUnit?'':unit,area:noUnit?'':document.getElementById('f-area').value.trim(),
     title,desc,category:cat,priority:document.getElementById('f-pri').value,
     assigneeId,assigneeRole:assignee?assignee.role:'runner',
     status:newStatus,
@@ -2770,7 +2771,7 @@ function populateRunnerFilter(){
   const users=DB.get('users')||[];const el=document.getElementById('filter-assignee');if(!el)return;
   const r=CU.role;
   const list=r==='manager'?(taskSubview==='admin'?users.filter(u=>u.role==='admin'):users.filter(u=>u.role==='runner')):users.filter(u=>u.role==='runner');
-  el.innerHTML='<option value="">All</option>'+list.map(u=>`<option value="${u.id}">${u.name}</option>`).join('');
+  el.innerHTML='<option value="">All User</option>'+list.map(u=>`<option value="${u.id}">${u.name}</option>`).join('');
 }
 function populateCondoDropdown(){
   const props=DB.get('props')||[];
