@@ -1887,15 +1887,16 @@ function openDetail(id){
   const sep='━━━━━━━━━━';
   const div='- - - - - - - - - - - - - - -';
 
-  // Show each bullet line of description directly under title (no 📋 prefix)
-  const descLines=t.desc&&t.title
+  // Task text, shown as its own bullet lines — no separate title line above it
+  // (title is just the first line of this same text, so repeating it here
+  // would duplicate the first bullet).
+  const descLines=t.desc
     ? t.desc.split('\n').map(l=>l.trim()).filter(Boolean)
     : [];
   const msgLines=[
     '🅿 PropFix',
     sep,
     locStr?'📍 '+locStr:'',
-    '🏷️ '+(t.title||t.desc),
     ...descLines,
     div,
     '👤 assign : '+aName,
