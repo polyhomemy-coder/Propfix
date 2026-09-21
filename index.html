@@ -896,14 +896,19 @@ function _resetIdleTimer(){
   document.addEventListener(evt, _resetIdleTimer, {passive:true});
 });
 
-function startAutoRefresh(){
-  stopAutoRefresh();
-  _refreshTimer=setInterval(async()=>{
-    if(!CU) return;
-    const activeModal=document.querySelector('.modal-bg.open');
-    if(activeModal) return;
+// ── Pull latest data from Supabase and silently re-render the current page ──
+// Shared by the 30s poll AND the wake-up listeners below, so both paths stay
+// in sync instead of drifting apart.
+let _syncInFlight=false,_lastSyncAt=0;
+async function _syncNow(force){
+  if(!CU) return;
+  if(_syncInFlight) return;
+  if(document.querySelector('.modal-bg.open')) return; // don't yank data out from under an open form
+  if(!force&&Date.now()-_lastSyncAt<5000) return; // debounce: focus+visibilitychange can both fire at once
+  _syncInFlight=true;
+  try{
     await _supaGetAll();
-    // Silently re-render current page
+    _lastSyncAt=Date.now();
     const activePage=document.querySelector('.page.active');
     if(activePage){
       const id=activePage.id;
@@ -913,9 +918,26 @@ function startAutoRefresh(){
       if(id==='page-cal') renderCalendar();
       if(id==='page-stat') renderStats();
     }
-  },30000); // every 30 seconds — faster sync keeps all devices current
+  } finally { _syncInFlight=false; }
+}
+
+function startAutoRefresh(){
+  stopAutoRefresh();
+  _refreshTimer=setInterval(()=>_syncNow(),30000); // every 30 seconds — faster sync keeps all devices current
 }
 function stopAutoRefresh(){if(_refreshTimer){clearInterval(_refreshTimer);_refreshTimer=null;}}
+
+// ── Chrome/Firefox fully pause setInterval on a tab that's been backgrounded
+// for a few minutes (and a laptop going to sleep stops it outright). That
+// silently freezes this device's data — 30s polling never resumes until
+// something wakes the tab back up. So: refresh immediately the moment the
+// tab becomes visible/focused again, instead of waiting for the next tick
+// that might not come for a long time. This is what was causing two devices
+// signed in as the same user to show different task lists/counts.
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')_syncNow(true);});
+window.addEventListener('focus',()=>_syncNow(true));
+window.addEventListener('pageshow',()=>_syncNow(true)); // bfcache restore (mobile back/forward)
+window.addEventListener('online',()=>_syncNow(true)); // reconnected after a dropped connection
 
 function showApp(){
   document.getElementById('auth-screen').style.display='none';
