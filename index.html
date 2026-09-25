@@ -56,6 +56,11 @@ input,select,textarea{font-family:inherit}
 .topbar-user{font-size:13px;color:rgba(255,255,255,0.7)}
 .btn-logout{font-size:12px;padding:5px 12px;border-radius:var(--radius);border:1px solid rgba(255,255,255,0.2);background:transparent;color:rgba(255,255,255,0.7)}
 .btn-logout:hover{background:rgba(255,255,255,0.1);color:white}
+.btn-refresh{width:30px;height:30px;padding:0;display:flex;align-items:center;justify-content:center;border-radius:50%;border:1px solid rgba(255,255,255,0.2);background:transparent;color:rgba(255,255,255,0.85)}
+.btn-refresh:hover{background:rgba(255,255,255,0.1);color:white}
+.btn-refresh svg{width:16px;height:16px;transition:transform 0.2s}
+.btn-refresh.spinning svg{animation:pf-spin 0.7s linear infinite}
+@keyframes pf-spin{to{transform:rotate(360deg)}}
 .nav-tabs{background:var(--white);border-bottom:1px solid var(--gray-200);padding:0 20px;display:flex;overflow-x:auto}
 .nav-tab{padding:12px 16px;font-size:13px;font-weight:500;color:var(--gray-500);border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap}
 .nav-tab:hover{color:var(--gray-800)}
@@ -382,7 +387,9 @@ textarea.mfi{resize:vertical;min-height:72px;font-size:14px}
 <div id="app">
   <div class="topbar">
     <div class="topbar-left"><span class="topbar-logo">Prop<span>Fix</span></span><span class="role-badge" id="role-badge">—</span></div>
-    <div class="topbar-right"><span class="topbar-user" id="topbar-user"></span><button class="btn-logout" onclick="doLogout()" title="Always sign out when you finish — your session is saved on this device only">Sign out ↩</button></div>
+    <div class="topbar-right"><span class="topbar-user" id="topbar-user"></span><button class="btn-refresh" id="btn-refresh" onclick="manualRefresh()" title="Refresh data">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 11-3-6.7"/><path d="M21 4v5h-5"/></svg>
+      </button><button class="btn-logout" onclick="doLogout()" title="Always sign out when you finish — your session is saved on this device only">Sign out ↩</button></div>
   </div>
   <div class="nav-tabs" id="nav-tabs"></div>
 
@@ -708,11 +715,36 @@ async function _writeBlob(k,v){
 }
 
 // ── Read ALL rows from Supabase ──
+// Supabase's REST API caps any single unpaginated select at a fixed row
+// count (1000 by default) — it does NOT error when a table has more rows
+// than that, it just silently truncates, and with no ORDER BY the *which*
+// 1000 rows come back is not guaranteed stable between requests. Once the
+// table has more rows than the cap, a refresh can legitimately return a
+// different subset each time, which is exactly what made tasks "randomly"
+// disappear here: a request that started returning the table's full 1067
+// rows started truncating to 1000 the moment it crossed that line, and
+// whichever tasks fell outside that window that time just vanished from
+// the app. Page through with Range headers so every row is always fetched,
+// no matter how large the table grows.
+async function _supaFetchAllRows(){
+  const pageSize=500;
+  let offset=0,rows=[];
+  for(let guard=0;guard<200;guard++){ // 200*500 = 100k rows hard ceiling, just to stop a runaway loop
+    const r=await fetch(SUPA_URL+'/rest/v1/propfix_data?select=key,value&order=key.asc',{
+      headers:{...HEADERS,'Range-Unit':'items','Range':`${offset}-${offset+pageSize-1}`}
+    });
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const batch=await r.json();
+    if(!Array.isArray(batch)) break;
+    rows=rows.concat(batch);
+    if(batch.length<pageSize) break; // last page
+    offset+=pageSize;
+  }
+  return rows;
+}
 async function _supaGetAll(){
   try{
-    const r=await fetch(SUPA_URL+'/rest/v1/propfix_data?select=key,value',{headers:HEADERS});
-    if(!r.ok) throw new Error('HTTP '+r.status);
-    const rows=await r.json();
+    const rows=await _supaFetchAllRows();
     if(!Array.isArray(rows)) return;
     const taskRows=[];
     rows.forEach(row=>{
@@ -758,10 +790,6 @@ const DB={
   set(k,v){
     if(k==='session'){_setSession(v);return;}
     _cache[k]=v;
-    // Backup to localStorage
-    if(k==='tasks'||k==='users'||k==='props'){
-      try{localStorage.setItem('pf_backup_'+k,JSON.stringify({data:v,savedAt:new Date().toISOString()}));}catch(e){}
-    }
     if(k==='tasks'&&Array.isArray(v)) _saveStatusSnapshot(v);
     // Tasks are written individually — blobs written as one row
     if(k!=='tasks') _writeBlob(k,v);
@@ -918,6 +946,27 @@ async function _syncNow(force){
       if(id==='page-stat') renderStats();
     }
   } finally { _syncInFlight=false; }
+}
+
+// ── Manual refresh button ──
+// When the app is saved to a phone's home screen it opens as its own
+// standalone window, with no browser chrome — no URL bar, no pull-to-
+// refresh, nothing to reload the page with. So this button is the only
+// way to force a resync on those installs.
+async function manualRefresh(){
+  const btn=document.getElementById('btn-refresh');
+  if(btn.classList.contains('spinning')) return; // already refreshing
+  if(document.querySelector('.modal-bg.open')){
+    showToast('Close the open window first, then refresh');
+    return;
+  }
+  btn.classList.add('spinning');
+  try{
+    await _syncNow(true);
+    showToast('Up to date');
+  } finally {
+    btn.classList.remove('spinning');
+  }
 }
 
 function startAutoRefresh(){
@@ -2829,40 +2878,19 @@ document.querySelectorAll('.modal-bg').forEach(bg=>bg.addEventListener('click',e
     err.style.display='block';
     return;
   }
-  // Restore from localStorage backup if Supabase data is empty
-  ['tasks','props'].forEach(k=>{
-    try{
-      const current=_cache[k];
-      const isEmpty=!current||(Array.isArray(current)&&current.length===0);
-      if(isEmpty){
-        const backup=localStorage.getItem('pf_backup_'+k);
-        if(backup){
-          const parsed=JSON.parse(backup);
-          if(parsed.data&&Array.isArray(parsed.data)&&parsed.data.length>0){
-            console.log('Restoring',k,'from localStorage backup saved at',parsed.savedAt);
-            _cache[k]=parsed.data;
-            _writeBlob(k,parsed.data);
-          }
-        }
-      }
-    }catch(e){}
-  });
-
-  // MIGRATION: if old 'tasks' blob exists in Supabase, migrate to per-task rows
-  // This runs once and converts old data to new architecture
-  if(Array.isArray(_cache['tasks'])&&_cache['tasks'].length>0){
-    const needsMigration=!_cache['_migrated_v2'];
-    if(needsMigration){
-      console.log('Migrating tasks to per-task rows...');
-      _cache['_migrated_v2']=true;
-      _writeBlob('_migrated_v2',true);
-      // Write each task as its own row
-      _cache['tasks'].forEach(t=>_writeTask(t));
-      // Remove the old blob (replace with empty marker)
-      _writeBlob('tasks','[]');
-      console.log('Migration complete — '+_cache['tasks'].length+' tasks migrated');
-    }
-  }
+  // NOTE: this used to also have a "restore tasks/props from this device's
+  // localStorage backup if the Supabase fetch looks empty, then migrate that
+  // restored data back into per-task rows" safety net, for the one-time
+  // transition off the old single-blob storage format. That migration
+  // finished long ago (_migrated_v2 has been true in Supabase for a long
+  // time) so it had no job left to do — and it was actively dangerous to
+  // keep: on ANY device, a single transient fetch glitch made "the server
+  // looks empty" indistinguishable from "the server IS empty", and in that
+  // case it would push that device's own stale local cache back up to
+  // Supabase for every user to see, silently resurrecting tasks that had
+  // since been legitimately deleted. That is confirmed to have actually
+  // happened (two previously-deleted test tasks reappeared with their exact
+  // original timestamps — the only code path that could do that). Removed.
 
   // Apply status snapshot — restores correct task statuses after a manual browser refresh
   // This fixes the bug where refreshing the page loads stale statuses from Supabase
